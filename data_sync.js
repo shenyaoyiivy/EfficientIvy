@@ -215,119 +215,261 @@ async function syncFromCloud() {
 
 // 将本地数据同步到云端
 async function syncToCloud() {
+    console.log('开始将本地数据同步到云端...');
+    
     const user = await window.getCurrentUser();
     if (!user) {
-        console.log('用户未登录，跳过同步数据到云端');
+        console.log('用户未登录，无法同步到云端');
         return false;
     }
     
     try {
-        // 收集所有按日期存储的待办事项
-        let allTodos = [];
+        // 收集本地所有的待办事项和计划
+        const localTodos = collectLocalTodos();
+        const localPlans = collectLocalPlans();
         
-        // 先检查是否有单一todos键的数据
-        const todosStr = localStorage.getItem('todos');
-        if (todosStr) {
-            try {
-                const todos = JSON.parse(todosStr);
-                if (Array.isArray(todos)) {
-                    allTodos = [...allTodos, ...todos];
-                }
-            } catch (e) {
-                console.error('解析todos数据失败:', e);
-            }
-        }
+        // 先获取云端现有数据
+        const cloudData = await fetchAllUserData(user.id);
         
-        // 然后收集所有按日期组织的待办事项
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key.startsWith('todos_') && key !== 'todos') {
-                try {
-                    const dateTodos = JSON.parse(localStorage.getItem(key));
-                    if (Array.isArray(dateTodos)) {
-                        // 为每个待办事项添加日期信息（从键名中提取）
-                        const dateStr = key.replace('todos_', '');
-                        const datedTodos = dateTodos.map(todo => ({
-                            ...todo,
-                            date: dateStr,
-                            updated_at: new Date().toISOString()
-                        }));
-                        allTodos = [...allTodos, ...datedTodos];
-                    }
-                } catch (e) {
-                    console.error(`解析${key}数据失败:`, e);
-                }
-            }
-        }
+        // 合并云端和本地数据（保留最新版本）
+        const mergedTodos = mergeTodosData(cloudData.todos, localTodos);
+        const mergedPlans = mergePlansData(cloudData.plans, localPlans);
         
-        // 去重（保留最新的待办事项）
-        const uniqueTodos = {};
-        allTodos.forEach(todo => {
-            // 使用id作为唯一标识，如果没有id则生成一个
-            const todoId = todo.id || `todo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-            if (!uniqueTodos[todoId] || 
-                (todo.updated_at && uniqueTodos[todoId].updated_at && 
-                 new Date(todo.updated_at) > new Date(uniqueTodos[todoId].updated_at))) {
-                uniqueTodos[todoId] = { ...todo, id: todoId };
-            }
-        });
+        // 保存合并后的数据到云端
+        const saveTodosResult = await saveTodosToCloud(mergedTodos, user.id);
+        const savePlansResult = await savePlansToCloud(mergedPlans, user.id);
         
-        // 转换回数组
-        const finalTodos = Object.values(uniqueTodos);
-        
-        // 更新单一todos键，用于下次同步
-        localStorage.setItem('todos', JSON.stringify(finalTodos));
-        
-        // 从本地存储获取长期计划
-        const plansStr = localStorage.getItem('plans');
-        const plans = plansStr ? JSON.parse(plansStr) : [];
-        
-        // 从本地存储获取笔记
-        const notesStr = localStorage.getItem('notes');
-        const notes = notesStr ? JSON.parse(notesStr) : [];
-        
-        // 同步待办事项
-        const todosSynced = await saveTodosToCloud(user.id, finalTodos);
-        if (!todosSynced) {
-            console.error('同步待办事项失败');
+        if (saveTodosResult && savePlansResult) {
+            console.log('本地数据成功同步到云端');
+            return true;
+        } else {
+            console.error('同步本地数据到云端失败');
             return false;
         }
-        
-        // 同步长期计划
-        const plansSynced = await savePlansToCloud(user.id, plans);
-        if (!plansSynced) {
-            console.error('同步长期计划失败');
-            return false;
-        }
-        
-        console.log('数据同步到云端成功');
-        return true;
     } catch (error) {
-        console.error('同步数据到云端失败:', error);
+        console.error('将本地数据同步到云端时发生错误:', error);
         return false;
     }
 }
 
-// 执行数据同步（双向同步）
+// 合并待办事项数据，保留最新的版本
+function mergeTodosData(cloudTodos, localTodos) {
+    const merged = {};
+    
+    // 先添加云端数据
+    if (cloudTodos) {
+        cloudTodos.forEach(todo => {
+            const key = `${todo.date}_${todo.id}`;
+            merged[key] = { ...todo };
+        });
+    }
+    
+    // 再用本地数据覆盖，保留最新版本
+    localTodos.forEach(todo => {
+        const key = `${todo.date}_${todo.id}`;
+        // 如果云端不存在这个待办事项，或者本地版本更新（根据updated_at），则保留本地版本
+        if (!merged[key] || !todo.updated_at || !merged[key].updated_at || 
+            new Date(todo.updated_at) > new Date(merged[key].updated_at)) {
+            merged[key] = { ...todo };
+        }
+    });
+    
+    // 转换回数组格式
+    return Object.values(merged);
+}
+
+// 合并计划数据，保留最新的版本
+function mergePlansData(cloudPlans, localPlans) {
+    const merged = {};
+    
+    // 先添加云端数据
+    if (cloudPlans) {
+        cloudPlans.forEach(plan => {
+            merged[plan.id] = { ...plan };
+        });
+    }
+    
+    // 再用本地数据覆盖，保留最新版本
+    localPlans.forEach(plan => {
+        // 如果云端不存在这个计划，或者本地版本更新（根据updated_at），则保留本地版本
+        if (!merged[plan.id] || !plan.updated_at || !merged[plan.id].updated_at || 
+            new Date(plan.updated_at) > new Date(merged[plan.id].updated_at)) {
+            merged[plan.id] = { ...plan };
+        }
+    });
+    
+    // 转换回数组格式
+    return Object.values(merged);
+}
+
+// 执行数据同步（双向同步，带数据合并）
 async function syncData() {
     console.log('开始执行数据同步...');
     
-    // 首先从云端同步数据
-    const fromCloudSynced = await syncFromCloud();
-    if (!fromCloudSynced) {
-        console.error('从云端同步数据失败，跳过后续同步步骤');
+    try {
+        const user = await window.getCurrentUser();
+        if (!user) {
+            console.log('用户未登录，跳过数据同步');
+            return false;
+        }
+        
+        // 1. 先备份本地数据
+        const localTodosBackup = JSON.parse(localStorage.getItem('todos') || '[]');
+        const localPlansBackup = JSON.parse(localStorage.getItem('plans') || '[]');
+        const localNotesBackup = JSON.parse(localStorage.getItem('notes') || '[]');
+        
+        // 2. 从云端获取最新数据
+        const cloudData = await fetchAllUserData(user.id);
+        
+        // 3. 合并数据（云端数据和本地数据合并，保留最新的版本）
+        // 合并待办事项
+        const mergedTodos = mergeData(localTodosBackup, cloudData.todos, 'id', 'updated_at');
+        
+        // 合并长期计划
+        const mergedPlans = mergeData(localPlansBackup, cloudData.plans, 'id', 'updated_at');
+        
+        // 合并笔记
+        const mergedNotes = mergeData(localNotesBackup, cloudData.notes, 'id', 'updated_at');
+        
+        // 4. 保存合并后的数据到本地存储
+        // 保存原始待办事项数据
+        localStorage.setItem('todos', JSON.stringify(mergedTodos));
+        
+        // 按日期重新组织待办事项
+        const todosByDate = {};
+        mergedTodos.forEach(todo => {
+            if (todo.date) {
+                const dateKey = formatDateKey(todo.date);
+                if (!todosByDate[dateKey]) {
+                    todosByDate[dateKey] = [];
+                }
+                todosByDate[dateKey].push(todo);
+            }
+        });
+        
+        // 保存按日期组织的待办事项
+        Object.keys(todosByDate).forEach(dateKey => {
+            localStorage.setItem(`todos_${dateKey}`, JSON.stringify(todosByDate[dateKey]));
+        });
+        
+        // 保存长期计划到本地存储
+        localStorage.setItem('plans', JSON.stringify(mergedPlans));
+        
+        // 保存笔记到本地存储
+        localStorage.setItem('notes', JSON.stringify(mergedNotes));
+        
+        // 5. 将合并后的数据同步到云端（使用upsert方式）
+        const todosSynced = await upsertTodosToCloud(user.id, mergedTodos);
+        const plansSynced = await upsertPlansToCloud(user.id, mergedPlans);
+        
+        if (todosSynced && plansSynced) {
+            console.log('数据同步完成');
+            // 触发数据同步完成事件
+            window.dispatchEvent(new CustomEvent('dataSynced'));
+            return true;
+        } else {
+            console.error('同步数据到云端失败');
+            // 如果同步失败，恢复本地备份
+            localStorage.setItem('todos', JSON.stringify(localTodosBackup));
+            localStorage.setItem('plans', JSON.stringify(localPlansBackup));
+            localStorage.setItem('notes', JSON.stringify(localNotesBackup));
+            return false;
+        }
+    } catch (error) {
+        console.error('数据同步过程中发生错误:', error);
         return false;
     }
+}
+
+// 合并两个数据集，基于ID和更新时间戳保留最新版本
+function mergeData(localData, cloudData, idField, timestampField) {
+    const mergedMap = new Map();
     
-    // 然后将本地数据同步到云端
-    const toCloudSynced = await syncToCloud();
-    if (!toCloudSynced) {
-        console.error('同步数据到云端失败');
+    // 先添加本地数据
+    localData.forEach(item => {
+        if (item[idField]) {
+            mergedMap.set(item[idField], item);
+        }
+    });
+    
+    // 再添加或更新云端数据（如果云端数据更新）
+    cloudData.forEach(item => {
+        if (item[idField]) {
+            const existingItem = mergedMap.get(item[idField]);
+            // 如果本地没有该数据，或者云端数据更新，则使用云端数据
+            if (!existingItem || 
+                !existingItem[timestampField] || 
+                !item[timestampField] || 
+                new Date(item[timestampField]) > new Date(existingItem[timestampField])) {
+                mergedMap.set(item[idField], item);
+            }
+        }
+    });
+    
+    // 转换回数组
+    return Array.from(mergedMap.values());
+}
+
+// 使用upsert方式将待办事项保存到云端（不删除现有数据，只更新或插入）
+async function upsertTodosToCloud(userId, todos) {
+    try {
+        if (todos.length > 0) {
+            const todoRecords = todos.map(todo => ({ 
+                ...todo, 
+                user_id: userId,
+                updated_at: todo.updated_at || new Date().toISOString()
+            }));
+            
+            // 分批处理，避免超过Supabase的批量操作限制
+            const batchSize = 100;
+            for (let i = 0; i < todoRecords.length; i += batchSize) {
+                const batch = todoRecords.slice(i, i + batchSize);
+                const { error: upsertError } = await window.supabase
+                    .from('todos')
+                    .upsert(batch, { onConflict: 'id' }); // 基于id字段进行upsert
+                
+                if (upsertError) {
+                    console.error('批量更新/插入待办事项失败:', upsertError);
+                    return false;
+                }
+            }
+        }
+        return true;
+    } catch (error) {
+        console.error('使用upsert方式保存待办事项到云端失败:', error);
         return false;
     }
-    
-    console.log('数据同步完成');
-    return true;
+}
+
+// 使用upsert方式将长期计划保存到云端（不删除现有数据，只更新或插入）
+async function upsertPlansToCloud(userId, plans) {
+    try {
+        if (plans.length > 0) {
+            const planRecords = plans.map(plan => ({ 
+                ...plan, 
+                user_id: userId,
+                updated_at: plan.updated_at || new Date().toISOString()
+            }));
+            
+            // 分批处理，避免超过Supabase的批量操作限制
+            const batchSize = 100;
+            for (let i = 0; i < planRecords.length; i += batchSize) {
+                const batch = planRecords.slice(i, i + batchSize);
+                const { error: upsertError } = await window.supabase
+                    .from('plans')
+                    .upsert(batch, { onConflict: 'id' }); // 基于id字段进行upsert
+                
+                if (upsertError) {
+                    console.error('批量更新/插入长期计划失败:', upsertError);
+                    return false;
+                }
+            }
+        }
+        return true;
+    } catch (error) {
+        console.error('使用upsert方式保存长期计划到云端失败:', error);
+        return false;
+    }
 }
 
 // 初始化数据同步模块

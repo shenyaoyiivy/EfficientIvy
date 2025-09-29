@@ -1425,6 +1425,9 @@ function reorderSubtasks(planId, draggedSubtaskId, targetSubtaskId) {
             // 插入到新位置
             plans[planIndex].subtasks.splice(targetIndex, 0, draggedSubtask);
             
+            // 更新更新时间戳
+            plans[planIndex].updatedAt = new Date().toISOString();
+            
             // 保存到localStorage
             localStorage.setItem('plans', JSON.stringify(plans));
             
@@ -1456,6 +1459,11 @@ function reorderSubtasks(planId, draggedSubtaskId, targetSubtaskId) {
                     }
                 }
             }
+            
+            // 触发数据同步到云端
+            if (window.syncData) {
+                window.syncData();
+            }
         }
     }
 }
@@ -1469,6 +1477,8 @@ function toggleSubtaskStatus(planId, subtaskId) {
         const subtaskIndex = plans[planIndex].subtasks.findIndex(subtask => subtask.id === subtaskId);
         if (subtaskIndex !== -1) {
             plans[planIndex].subtasks[subtaskIndex].completed = !plans[planIndex].subtasks[subtaskIndex].completed;
+            plans[planIndex].subtasks[subtaskIndex].updatedAt = new Date().toISOString();
+            plans[planIndex].updatedAt = new Date().toISOString();
             localStorage.setItem('plans', JSON.stringify(plans));
             
             // 更新计划状态
@@ -1501,6 +1511,11 @@ function toggleSubtaskStatus(planId, subtaskId) {
                         }
                     });
                 }
+            }
+            
+            // 触发数据同步到云端
+            if (window.syncData) {
+                window.syncData();
             }
         }
     }
@@ -1547,6 +1562,11 @@ function deleteSubtask(planId, subtaskId) {
                     }, 10);
                 }
             }
+        }
+        
+        // 触发数据同步到云端
+        if (window.syncData) {
+            window.syncData();
         }
     }
 }

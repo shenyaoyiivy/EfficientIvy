@@ -229,9 +229,14 @@ function initAuth() {
                 userInfoElement.textContent = `欢迎，${user.email}`;
                 userInfoElement.style.display = 'block';
             }
-            // 触发数据同步
-            if (window.syncData) {
-                window.syncData();
+            
+            // 触发数据同步 - 从云端加载数据到本地
+            if (window.syncFromCloud) {
+                // 先从云端同步数据到本地存储
+                await window.syncFromCloud();
+            } else if (window.syncData) {
+                // 备用方案：使用完整的同步函数
+                await window.syncData();
             }
         } else {
             // 用户未登录
