@@ -584,6 +584,12 @@ function addTodoToDOM(todo, dateKey) {
     if (todo.completed) {
         todoText.classList.add('line-through', 'text-gray-400');
     }
+
+    // 添加创建时间显示
+    const createTimeElement = document.createElement('span');
+    createTimeElement.textContent = todo.createdAt ? formatDateTime(todo.createdAt) : '';
+    createTimeElement.classList.add('text-xs', 'text-gray-400', 'ml-2');
+    todoItem.appendChild(createTimeElement);
     
     // 优先级选择器
     const priorityContainer = document.createElement('div');
@@ -1614,7 +1620,8 @@ function initNotesPage() {
     saveNoteBtn.addEventListener('click', saveNote);
     
     document.getElementById('note-input').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter' && e.ctrlKey) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
             saveNote();
         }
     });
