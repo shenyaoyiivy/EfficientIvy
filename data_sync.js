@@ -150,66 +150,101 @@ async function savePlansToCloud(userId, plans) {
 
 // 从云端同步数据到本地
 async function syncFromCloud() {
+    console.log('开始从云端同步数据到本地...');
+    
     const user = await window.getCurrentUser();
     if (!user) {
-        console.log('用户未登录，跳过从云端同步数据');
+        console.log('用户未登录，无法从云端同步数据');
         return false;
     }
     
     try {
-        const userData = await fetchAllUserData(user.id);
+        // 获取云端数据
+        const cloudData = await fetchAllUserData(user.id);
         
-        // 保存待办事项到本地存储（按日期组织）
-        // 先清空所有现有的待办事项键
-        const keysToRemove = [];
+        if (cloudData) {
+            console.log('成功获取云端数据，开始处理...');
+            
+            // 收集本地现有数据
+            const localTodos = collectLocalTodos();
+            const localPlans = collectLocalPlans();
+            
+            // 合并云端和本地数据（保留最新版本）
+            const mergedTodos = mergeTodosData(cloudData.todos, localTodos);
+            const mergedPlans = mergePlansData(cloudData.plans, localPlans);
+            
+            // 按日期组织待办事项并保存，但不删除现有的待办事项键
+            const todosByDate = {};
+            mergedTodos.forEach(todo => {
+                const dateKey = `todos_${formatDateKey(todo.date)}`;
+                if (!todosByDate[dateKey]) {
+                    todosByDate[dateKey] = [];
+                }
+                todosByDate[dateKey].push(todo);
+            });
+            
+            // 保存合并后的待办事项数据
+            Object.entries(todosByDate).forEach(([key, todos]) => {
+                localStorage.setItem(key, JSON.stringify(todos));
+            });
+            
+            // 保存合并后的计划和笔记数据
+            if (mergedPlans && mergedPlans.length > 0) {
+                localStorage.setItem('plans', JSON.stringify(mergedPlans));
+            }
+            
+            if (cloudData.notes && cloudData.notes.length > 0) {
+                localStorage.setItem('notes', JSON.stringify(cloudData.notes));
+            }
+            
+            console.log('数据成功从云端同步到本地并与本地数据合并');
+            return true;
+        } else {
+            console.error('获取云端数据失败');
+            return false;
+        }
+    } catch (error) {
+        console.error('从云端同步数据到本地时发生错误:', error);
+        return false;
+    }
+}
+
+// 收集本地所有待办事项
+export function collectLocalTodos() {
+    try {
+        // 先尝试从todos键获取所有待办事项
+        const todos = JSON.parse(localStorage.getItem('todos') || '[]');
+        if (todos && todos.length > 0) {
+            return todos;
+        }
+        
+        // 如果todos键不存在或为空，则从按日期组织的待办事项中收集
+        const allTodos = [];
         for (let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i);
             if (key.startsWith('todos_')) {
-                keysToRemove.push(key);
+                const dateTodos = JSON.parse(localStorage.getItem(key) || '[]');
+                if (dateTodos && Array.isArray(dateTodos)) {
+                    allTodos.push(...dateTodos);
+                }
             }
         }
-        keysToRemove.forEach(key => localStorage.removeItem(key));
         
-        // 然后按日期存储待办事项
-        if (userData.todos && userData.todos.length > 0) {
-            // 保存原始待办事项数据（用于同步到云端）
-            localStorage.setItem('todos', JSON.stringify(userData.todos));
-            
-            // 按日期重新组织待办事项
-            const todosByDate = {};
-            userData.todos.forEach(todo => {
-                if (todo.date) {
-                    const dateKey = formatDateKey(todo.date);
-                    if (!todosByDate[dateKey]) {
-                        todosByDate[dateKey] = [];
-                    }
-                    todosByDate[dateKey].push(todo);
-                }
-            });
-            
-            // 保存按日期组织的待办事项
-            Object.keys(todosByDate).forEach(dateKey => {
-                localStorage.setItem(`todos_${dateKey}`, JSON.stringify(todosByDate[dateKey]));
-            });
-        } else {
-            localStorage.setItem('todos', JSON.stringify([]));
-        }
-        
-        // 保存长期计划到本地存储
-        localStorage.setItem('plans', JSON.stringify(userData.plans));
-        
-        // 保存笔记到本地存储
-        localStorage.setItem('notes', JSON.stringify(userData.notes));
-        
-        console.log('从云端同步数据成功');
-        
-        // 触发数据同步完成事件
-        window.dispatchEvent(new CustomEvent('dataSynced'));
-        
-        return true;
+        return allTodos;
     } catch (error) {
-        console.error('从云端同步数据失败:', error);
-        return false;
+        console.error('收集本地待办事项失败:', error);
+        return [];
+    }
+}
+
+// 收集本地所有长期计划
+export function collectLocalPlans() {
+    try {
+        const plans = JSON.parse(localStorage.getItem('plans') || '[]');
+        return plans || [];
+    } catch (error) {
+        console.error('收集本地长期计划失败:', error);
+        return [];
     }
 }
 
@@ -235,9 +270,9 @@ async function syncToCloud() {
         const mergedTodos = mergeTodosData(cloudData.todos, localTodos);
         const mergedPlans = mergePlansData(cloudData.plans, localPlans);
         
-        // 保存合并后的数据到云端
-        const saveTodosResult = await saveTodosToCloud(mergedTodos, user.id);
-        const savePlansResult = await savePlansToCloud(mergedPlans, user.id);
+        // 保存合并后的数据到云端 - 修复参数顺序
+        const saveTodosResult = await saveTodosToCloud(user.id, mergedTodos);
+        const savePlansResult = await savePlansToCloud(user.id, mergedPlans);
         
         if (saveTodosResult && savePlansResult) {
             console.log('本地数据成功同步到云端');
@@ -302,81 +337,134 @@ function mergePlansData(cloudPlans, localPlans) {
     return Object.values(merged);
 }
 
-// 执行数据同步（双向同步，带数据合并）
+// 主要的数据同步函数（结合双向同步）
 async function syncData() {
     console.log('开始执行数据同步...');
     
+    const user = await window.getCurrentUser();
+    if (!user) {
+        console.log('用户未登录，跳过数据同步');
+        return false;
+    }
+    
     try {
-        const user = await window.getCurrentUser();
-        if (!user) {
-            console.log('用户未登录，跳过数据同步');
-            return false;
-        }
-        
-        // 1. 先备份本地数据
-        const localTodosBackup = JSON.parse(localStorage.getItem('todos') || '[]');
-        const localPlansBackup = JSON.parse(localStorage.getItem('plans') || '[]');
+        // 1. 备份本地数据，以防同步失败
+        const localTodosBackup = collectLocalTodos();
+        const localPlansBackup = collectLocalPlans();
         const localNotesBackup = JSON.parse(localStorage.getItem('notes') || '[]');
+        
+        console.log('已创建本地数据备份，准备同步...');
         
         // 2. 从云端获取最新数据
         const cloudData = await fetchAllUserData(user.id);
         
-        // 3. 合并数据（云端数据和本地数据合并，保留最新的版本）
-        // 合并待办事项
-        const mergedTodos = mergeData(localTodosBackup, cloudData.todos, 'id', 'updated_at');
+        if (!cloudData) {
+            console.error('获取云端数据失败');
+            return false;
+        }
         
-        // 合并长期计划
-        const mergedPlans = mergeData(localPlansBackup, cloudData.plans, 'id', 'updated_at');
+        // 3. 收集当前本地数据
+        const currentLocalTodos = collectLocalTodos();
+        const currentLocalPlans = collectLocalPlans();
         
-        // 合并笔记
-        const mergedNotes = mergeData(localNotesBackup, cloudData.notes, 'id', 'updated_at');
+        // 4. 合并云端和本地数据（保留最新版本）
+        const mergedTodos = mergeTodosData(cloudData.todos, currentLocalTodos);
+        const mergedPlans = mergePlansData(cloudData.plans, currentLocalPlans);
+        const mergedNotes = cloudData.notes && cloudData.notes.length > 0 ? 
+            cloudData.notes : localNotesBackup;
         
-        // 4. 保存合并后的数据到本地存储
-        // 保存原始待办事项数据
-        localStorage.setItem('todos', JSON.stringify(mergedTodos));
+        console.log('数据合并完成，准备保存到本地...');
         
-        // 按日期重新组织待办事项
+        // 5. 按日期组织待办事项并保存到localStorage
         const todosByDate = {};
         mergedTodos.forEach(todo => {
-            if (todo.date) {
-                const dateKey = formatDateKey(todo.date);
-                if (!todosByDate[dateKey]) {
-                    todosByDate[dateKey] = [];
-                }
-                todosByDate[dateKey].push(todo);
+            const dateKey = `todos_${formatDateKey(todo.date)}`;
+            if (!todosByDate[dateKey]) {
+                todosByDate[dateKey] = [];
             }
+            todosByDate[dateKey].push(todo);
         });
         
-        // 保存按日期组织的待办事项
-        Object.keys(todosByDate).forEach(dateKey => {
-            localStorage.setItem(`todos_${dateKey}`, JSON.stringify(todosByDate[dateKey]));
+        // 保存合并后的待办事项数据
+        Object.entries(todosByDate).forEach(([key, todos]) => {
+            localStorage.setItem(key, JSON.stringify(todos));
         });
         
-        // 保存长期计划到本地存储
+        // 保存合并后的计划和笔记数据
         localStorage.setItem('plans', JSON.stringify(mergedPlans));
-        
-        // 保存笔记到本地存储
         localStorage.setItem('notes', JSON.stringify(mergedNotes));
         
-        // 5. 将合并后的数据同步到云端（使用upsert方式）
-        const todosSynced = await upsertTodosToCloud(user.id, mergedTodos);
-        const plansSynced = await upsertPlansToCloud(user.id, mergedPlans);
+        console.log('数据已保存到本地存储，准备同步到云端...');
         
-        if (todosSynced && plansSynced) {
-            console.log('数据同步完成');
+        // 6. 使用upsert方式将合并后的数据同步到云端
+        const syncTodosResult = await upsertTodosToCloud(user.id, mergedTodos);
+        const syncPlansResult = await upsertPlansToCloud(user.id, mergedPlans);
+        
+        if (syncTodosResult && syncPlansResult) {
+            console.log('数据同步成功！');
             // 触发数据同步完成事件
             window.dispatchEvent(new CustomEvent('dataSynced'));
             return true;
         } else {
-            console.error('同步数据到云端失败');
-            // 如果同步失败，恢复本地备份
+            console.error('同步数据到云端失败，正在恢复本地备份...');
+            
+            // 7. 同步失败时，恢复本地数据
             localStorage.setItem('todos', JSON.stringify(localTodosBackup));
             localStorage.setItem('plans', JSON.stringify(localPlansBackup));
             localStorage.setItem('notes', JSON.stringify(localNotesBackup));
+            
+            // 重新按日期组织待办事项
+            const backupTodosByDate = {};
+            localTodosBackup.forEach(todo => {
+                const dateKey = `todos_${formatDateKey(todo.date)}`;
+                if (!backupTodosByDate[dateKey]) {
+                    backupTodosByDate[dateKey] = [];
+                }
+                backupTodosByDate[dateKey].push(todo);
+            });
+            
+            // 保存恢复的按日期组织的待办事项
+            Object.entries(backupTodosByDate).forEach(([key, todos]) => {
+                localStorage.setItem(key, JSON.stringify(todos));
+            });
+            
+            console.log('本地数据已恢复');
             return false;
         }
     } catch (error) {
         console.error('数据同步过程中发生错误:', error);
+        
+        // 同步过程中发生错误，尝试恢复本地数据
+        try {
+            console.log('尝试恢复本地数据...');
+            const localTodosBackup = collectLocalTodos();
+            const localPlansBackup = collectLocalPlans();
+            const localNotesBackup = JSON.parse(localStorage.getItem('notes') || '[]');
+            
+            localStorage.setItem('todos', JSON.stringify(localTodosBackup));
+            localStorage.setItem('plans', JSON.stringify(localPlansBackup));
+            localStorage.setItem('notes', JSON.stringify(localNotesBackup));
+            
+            // 重新按日期组织待办事项
+            const backupTodosByDate = {};
+            localTodosBackup.forEach(todo => {
+                const dateKey = `todos_${formatDateKey(todo.date)}`;
+                if (!backupTodosByDate[dateKey]) {
+                    backupTodosByDate[dateKey] = [];
+                }
+                backupTodosByDate[dateKey].push(todo);
+            });
+            
+            // 保存恢复的按日期组织的待办事项
+            Object.entries(backupTodosByDate).forEach(([key, todos]) => {
+                localStorage.setItem(key, JSON.stringify(todos));
+            });
+            
+            console.log('本地数据已恢复');
+        } catch (recoverError) {
+            console.error('恢复本地数据失败:', recoverError);
+        }
+        
         return false;
     }
 }

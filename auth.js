@@ -49,15 +49,28 @@ async function registerUser(email, password) {
 }
 
 // 用户登出
-async function logoutUser() {
-    const { error } = await supabase.auth.signOut();
-    
-    if (error) {
-        console.error('登出失败:', error);
+// 登出用户
+export async function logoutUser() {
+    try {
+        // 登出前先同步数据到云端
+        console.log('登出前同步数据到云端...');
+        await window.syncData();
+        
+        // 然后再执行登出操作
+        const { error } = await window.supabase.auth.signOut();
+        
+        if (error) {
+            console.error('登出失败:', error);
+            throw error;
+        }
+        
+        console.log('用户成功登出');
+        updateAuthUI(null);
+        return true;
+    } catch (error) {
+        console.error('登出过程中发生错误:', error);
         return false;
     }
-    
-    return true;
 }
 
 // 获取当前用户
