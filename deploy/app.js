@@ -164,6 +164,28 @@ function initApp() {
     
     // 初始化随手记页面
     initNotesPage();
+    
+    // 确保在页面加载时就能显示本地数据，而不依赖数据同步完成事件
+    // 这解决了在GitHub Pages上刷新页面后内容重置的问题
+    setTimeout(() => {
+        // 立即显示今日待办页面的数据
+        const todayPage = document.getElementById('today-todos');
+        if (!todayPage.classList.contains('hidden')) {
+            showTodosForDate(selectedDate);
+        }
+        
+        // 检查其他页面是否需要加载数据
+        const planPage = document.getElementById('long-term-plans');
+        const notesPage = document.getElementById('notes');
+        
+        if (!planPage.classList.contains('hidden')) {
+            loadPlans();
+        }
+        
+        if (!notesPage.classList.contains('hidden')) {
+            loadNotes();
+        }
+    }, 100);
 }
 
 // 初始化导航
@@ -562,6 +584,12 @@ function addTodoToDOM(todo, dateKey) {
     if (todo.completed) {
         todoText.classList.add('line-through', 'text-gray-400');
     }
+
+    // 添加创建时间显示
+    const createTimeElement = document.createElement('span');
+    createTimeElement.textContent = todo.createdAt ? formatDateTime(todo.createdAt) : '';
+    createTimeElement.classList.add('text-xs', 'text-gray-400', 'ml-2');
+    todoItem.appendChild(createTimeElement);
     
     // 优先级选择器
     const priorityContainer = document.createElement('div');
@@ -674,12 +702,18 @@ function updateTodoPriority(todoId, dateKey, priority) {
     const todoIndex = todos.findIndex(todo => todo.id === todoId);
     if (todoIndex !== -1) {
         todos[todoIndex].priority = priority;
+        todos[todoIndex].updatedAt = new Date().toISOString();
         
         // 保存到localStorage
         localStorage.setItem(`todos_${dateKey}`, JSON.stringify(todos));
         
         // 更新显示
         showTodosForDate(selectedDate);
+        
+        // 触发数据同步到云端
+        if (window.syncData) {
+            window.syncData();
+        }
     }
 }
 
@@ -725,7 +759,9 @@ function addTodo() {
             id: Date.now(),
             text: text,
             completed: false,
-            priority: null // null, 'low', 'medium', 'high'
+            priority: null, // null, 'low', 'medium', 'high'
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
         };
         
         todos.push(newTodo);
@@ -740,6 +776,11 @@ function addTodo() {
         showTodosForDate(selectedDate);
         // 更新日历标记
         renderCalendar();
+        
+        // 触发数据同步到云端
+        if (window.syncData) {
+            window.syncData();
+        }
     }
 }
 
@@ -752,6 +793,7 @@ function toggleTodoStatus(id, dateKey) {
     const todoIndex = todos.findIndex(todo => todo.id === id);
     if (todoIndex !== -1) {
         todos[todoIndex].completed = !todos[todoIndex].completed;
+        todos[todoIndex].updatedAt = new Date().toISOString();
         
         // 保存到localStorage
         localStorage.setItem(`todos_${dateKey}`, JSON.stringify(todos));
@@ -760,6 +802,11 @@ function toggleTodoStatus(id, dateKey) {
         showTodosForDate(selectedDate);
         // 更新日历标记
         renderCalendar();
+        
+        // 触发数据同步到云端
+        if (window.syncData) {
+            window.syncData();
+        }
     }
 }
 
@@ -778,6 +825,11 @@ function deleteTodo(id, dateKey) {
     showTodosForDate(selectedDate);
     // 更新日历标记
     renderCalendar();
+    
+    // 触发数据同步到云端
+    if (window.syncData) {
+        window.syncData();
+    }
 }
 
 // 初始化长期计划页面
@@ -1304,8 +1356,14 @@ function updatePlanTitle(planId, newTitle) {
     
     if (planIndex !== -1) {
         plans[planIndex].title = newTitle;
+        plans[planIndex].updatedAt = new Date().toISOString();
         localStorage.setItem('plans', JSON.stringify(plans));
         renderPlans();
+        
+        // 触发数据同步到云端
+        if (window.syncData) {
+            window.syncData();
+        }
     }
 }
 
@@ -1316,8 +1374,14 @@ function updatePlanPriority(planId, priority) {
     
     if (planIndex !== -1) {
         plans[planIndex].priority = priority;
+        plans[planIndex].updatedAt = new Date().toISOString();
         localStorage.setItem('plans', JSON.stringify(plans));
         renderPlans();
+        
+        // 触发数据同步到云端
+        if (window.syncData) {
+            window.syncData();
+        }
     }
 }
 
@@ -1328,7 +1392,13 @@ function updatePlanDescription(planId, newDescription) {
     
     if (planIndex !== -1) {
         plans[planIndex].description = newDescription;
+        plans[planIndex].updatedAt = new Date().toISOString();
         localStorage.setItem('plans', JSON.stringify(plans));
+        
+        // 触发数据同步到云端
+        if (window.syncData) {
+            window.syncData();
+        }
     }
 }
 
@@ -1343,10 +1413,12 @@ function addSubtask(planId, subtaskText) {
                 id: Date.now(),
                 text: subtaskText.trim(),
                 completed: false,
-                createdAt: Date.now() // 添加创建时间
+                createdAt: Date.now(), // 添加创建时间
+                updatedAt: Date.now()
             };
             
             plans[planIndex].subtasks.push(newSubtask);
+            plans[planIndex].updatedAt = new Date().toISOString();
             localStorage.setItem('plans', JSON.stringify(plans));
             
             // 更新计划状态
@@ -1355,6 +1427,11 @@ function addSubtask(planId, subtaskText) {
             // 简化实现：重新渲染所有计划
             // 这样可以确保所有状态都正确同步，避免复杂的DOM操作导致的问题
             renderPlans();
+            
+            // 触发数据同步到云端
+            if (window.syncData) {
+                window.syncData();
+            }
         }
     }
 }
@@ -1375,6 +1452,9 @@ function reorderSubtasks(planId, draggedSubtaskId, targetSubtaskId) {
             
             // 插入到新位置
             plans[planIndex].subtasks.splice(targetIndex, 0, draggedSubtask);
+            
+            // 更新更新时间戳
+            plans[planIndex].updatedAt = new Date().toISOString();
             
             // 保存到localStorage
             localStorage.setItem('plans', JSON.stringify(plans));
@@ -1407,6 +1487,11 @@ function reorderSubtasks(planId, draggedSubtaskId, targetSubtaskId) {
                     }
                 }
             }
+            
+            // 触发数据同步到云端
+            if (window.syncData) {
+                window.syncData();
+            }
         }
     }
 }
@@ -1420,6 +1505,8 @@ function toggleSubtaskStatus(planId, subtaskId) {
         const subtaskIndex = plans[planIndex].subtasks.findIndex(subtask => subtask.id === subtaskId);
         if (subtaskIndex !== -1) {
             plans[planIndex].subtasks[subtaskIndex].completed = !plans[planIndex].subtasks[subtaskIndex].completed;
+            plans[planIndex].subtasks[subtaskIndex].updatedAt = new Date().toISOString();
+            plans[planIndex].updatedAt = new Date().toISOString();
             localStorage.setItem('plans', JSON.stringify(plans));
             
             // 更新计划状态
@@ -1453,6 +1540,11 @@ function toggleSubtaskStatus(planId, subtaskId) {
                     });
                 }
             }
+            
+            // 触发数据同步到云端
+            if (window.syncData) {
+                window.syncData();
+            }
         }
     }
 }
@@ -1465,6 +1557,7 @@ function deleteSubtask(planId, subtaskId) {
     if (planIndex !== -1) {
         // 先保存更新后的数据
         plans[planIndex].subtasks = plans[planIndex].subtasks.filter(subtask => subtask.id !== subtaskId);
+        plans[planIndex].updatedAt = new Date().toISOString();
         localStorage.setItem('plans', JSON.stringify(plans));
         
         // 更新计划状态
@@ -1498,6 +1591,11 @@ function deleteSubtask(planId, subtaskId) {
                 }
             }
         }
+        
+        // 触发数据同步到云端
+        if (window.syncData) {
+            window.syncData();
+        }
     }
 }
 
@@ -1508,6 +1606,11 @@ function deletePlan(planId) {
     
     localStorage.setItem('plans', JSON.stringify(updatedPlans));
     renderPlans();
+    
+    // 触发数据同步到云端
+    if (window.syncData) {
+        window.syncData();
+    }
 }
 
 // 初始化随手记页面
@@ -1517,7 +1620,8 @@ function initNotesPage() {
     saveNoteBtn.addEventListener('click', saveNote);
     
     document.getElementById('note-input').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter' && e.ctrlKey) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
             saveNote();
         }
     });
@@ -1539,7 +1643,8 @@ function saveNote() {
         const newNote = {
             id: Date.now(),
             content: content,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
         };
         
         notes.unshift(newNote); // 新笔记添加到开头
@@ -1552,6 +1657,11 @@ function saveNote() {
         
         // 更新显示
         renderNotes();
+        
+        // 触发数据同步到云端
+        if (window.syncData) {
+            window.syncData();
+        }
     }
 }
 
@@ -1697,8 +1807,14 @@ function updateNote(noteId, newContent) {
     
     if (noteIndex !== -1) {
         notes[noteIndex].content = newContent;
+        notes[noteIndex].updatedAt = new Date().toISOString();
         localStorage.setItem('notes', JSON.stringify(notes));
         renderNotes();
+        
+        // 触发数据同步到云端
+        if (window.syncData) {
+            window.syncData();
+        }
     }
 }
 
@@ -1731,6 +1847,11 @@ function deleteNote(noteId) {
     
     localStorage.setItem('notes', JSON.stringify(updatedNotes));
     renderNotes();
+    
+    // 触发数据同步到云端
+    if (window.syncData) {
+        window.syncData();
+    }
 }
 
 // AI助手功能
@@ -2315,5 +2436,34 @@ function initNotesPage() {
     initAIAssistant();
 }
 
-// 启动应用
-initApp();
+// 初始化认证和数据同步模块
+document.addEventListener('DOMContentLoaded', () => {
+    // 启动应用
+    initApp();
+    
+    // 初始化认证模块
+    if (window.initAuth) {
+        window.initAuth();
+    }
+    
+    // 初始化数据同步
+    if (window.initDataSync) {
+        window.initDataSync();
+    }
+    
+    // 监听数据同步完成事件，更新UI
+    window.addEventListener('dataSynced', () => {
+        // 重新加载当前页面的数据
+        const activePage = document.querySelector('.page.active');
+        if (activePage) {
+            if (activePage.id === 'today-todos') {
+                const today = new Date().toISOString().split('T')[0];
+                showTodosForDate(today);
+            } else if (activePage.id === 'long-term-plans') {
+                loadPlans();
+            } else if (activePage.id === 'notes') {
+                loadNotes();
+            }
+        }
+    });
+});
