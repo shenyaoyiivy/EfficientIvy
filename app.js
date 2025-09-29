@@ -164,6 +164,28 @@ function initApp() {
     
     // 初始化随手记页面
     initNotesPage();
+    
+    // 确保在页面加载时就能显示本地数据，而不依赖数据同步完成事件
+    // 这解决了在GitHub Pages上刷新页面后内容重置的问题
+    setTimeout(() => {
+        // 立即显示今日待办页面的数据
+        const todayPage = document.getElementById('today-todos');
+        if (!todayPage.classList.contains('hidden')) {
+            showTodosForDate(selectedDate);
+        }
+        
+        // 检查其他页面是否需要加载数据
+        const planPage = document.getElementById('long-term-plans');
+        const notesPage = document.getElementById('notes');
+        
+        if (!planPage.classList.contains('hidden')) {
+            loadPlans();
+        }
+        
+        if (!notesPage.classList.contains('hidden')) {
+            loadNotes();
+        }
+    }, 100);
 }
 
 // 初始化导航

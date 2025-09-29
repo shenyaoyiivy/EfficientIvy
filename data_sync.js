@@ -577,8 +577,66 @@ function initDataSync() {
         }
     });
     
+    // 添加页面加载时的数据恢复逻辑，确保即使在未登录状态下也能加载本地数据
+    document.addEventListener('DOMContentLoaded', () => {
+        // 确保即使没有认证，也能加载localStorage中的数据
+        console.log('页面加载，尝试恢复本地数据');
+        // 触发数据同步完成事件，以便UI组件能正确加载数据
+        setTimeout(() => {
+            const dataSyncedEvent = new CustomEvent('dataSynced');
+            window.dispatchEvent(dataSyncedEvent);
+        }, 100);
+    });
+    
     // 将syncData函数暴露到全局，方便其他地方调用
     window.syncData = syncData;
+}
+
+// 从云端同步数据到本地
+async function syncFromCloud() {
+    try {
+        const user = await window.getCurrentUser();
+        if (!user) {
+            console.log('用户未登录，跳过从云端同步数据');
+            return;
+        }
+        
+        const allUserData = await fetchAllUserData();
+        
+        if (allUserData && allUserData.todos) {
+            // 保存待办事项数据到localStorage
+            allUserData.todos.forEach(todo => {
+                const dateKey = todo.date.replace(/-/g, '_');
+                // 先获取现有数据
+                const existingTodos = JSON.parse(localStorage.getItem(`todos_${dateKey}`) || '[]');
+                
+                // 检查是否已存在相同ID的待办事项
+                const existingIndex = existingTodos.findIndex(t => t.id === todo.id);
+                
+                if (existingIndex >= 0) {
+                    // 如果已存在，比较更新时间，保留最新的
+                    const existingTodo = existingTodos[existingIndex];
+                    const existingUpdatedAt = new Date(existingTodo.updatedAt || existingTodo.updated_at);
+                    const cloudUpdatedAt = new Date(todo.updatedAt || todo.updated_at);
+                    
+                    if (cloudUpdatedAt > existingUpdatedAt) {
+                        existingTodos[existingIndex] = todo;
+                    }
+                } else {
+                    // 如果不存在，添加新的待办事项
+                    existingTodos.push(todo);
+                }
+                
+                localStorage.setItem(`todos_${dateKey}`, JSON.stringify(existingTodos));
+            });
+        }
+        
+        // 其他数据类型的同步逻辑...
+        
+    } catch (error) {
+        console.error('从云端同步数据失败:', error);
+        // 失败时不抛出错误，避免影响用户体验
+    }
 }
 
 // 将initDataSync函数挂载到window对象上，以便在app.js中访问
