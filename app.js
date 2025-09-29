@@ -2315,5 +2315,34 @@ function initNotesPage() {
     initAIAssistant();
 }
 
-// 启动应用
-initApp();
+// 初始化认证和数据同步模块
+document.addEventListener('DOMContentLoaded', () => {
+    // 启动应用
+    initApp();
+    
+    // 初始化认证模块
+    if (window.initAuth) {
+        window.initAuth();
+    }
+    
+    // 初始化数据同步
+    if (window.initDataSync) {
+        window.initDataSync();
+    }
+    
+    // 监听数据同步完成事件，更新UI
+    window.addEventListener('dataSynced', () => {
+        // 重新加载当前页面的数据
+        const activePage = document.querySelector('.page.active');
+        if (activePage) {
+            if (activePage.id === 'today-todos') {
+                const today = new Date().toISOString().split('T')[0];
+                showTodosForDate(today);
+            } else if (activePage.id === 'long-term-plans') {
+                loadPlans();
+            } else if (activePage.id === 'notes') {
+                loadNotes();
+            }
+        }
+    });
+});
