@@ -674,12 +674,18 @@ function updateTodoPriority(todoId, dateKey, priority) {
     const todoIndex = todos.findIndex(todo => todo.id === todoId);
     if (todoIndex !== -1) {
         todos[todoIndex].priority = priority;
+        todos[todoIndex].updatedAt = new Date().toISOString();
         
         // 保存到localStorage
         localStorage.setItem(`todos_${dateKey}`, JSON.stringify(todos));
         
         // 更新显示
         showTodosForDate(selectedDate);
+        
+        // 触发数据同步到云端
+        if (window.syncData) {
+            window.syncData();
+        }
     }
 }
 
@@ -725,7 +731,9 @@ function addTodo() {
             id: Date.now(),
             text: text,
             completed: false,
-            priority: null // null, 'low', 'medium', 'high'
+            priority: null, // null, 'low', 'medium', 'high'
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
         };
         
         todos.push(newTodo);
@@ -740,6 +748,11 @@ function addTodo() {
         showTodosForDate(selectedDate);
         // 更新日历标记
         renderCalendar();
+        
+        // 触发数据同步到云端
+        if (window.syncData) {
+            window.syncData();
+        }
     }
 }
 
@@ -752,6 +765,7 @@ function toggleTodoStatus(id, dateKey) {
     const todoIndex = todos.findIndex(todo => todo.id === id);
     if (todoIndex !== -1) {
         todos[todoIndex].completed = !todos[todoIndex].completed;
+        todos[todoIndex].updatedAt = new Date().toISOString();
         
         // 保存到localStorage
         localStorage.setItem(`todos_${dateKey}`, JSON.stringify(todos));
@@ -760,6 +774,11 @@ function toggleTodoStatus(id, dateKey) {
         showTodosForDate(selectedDate);
         // 更新日历标记
         renderCalendar();
+        
+        // 触发数据同步到云端
+        if (window.syncData) {
+            window.syncData();
+        }
     }
 }
 
@@ -778,6 +797,11 @@ function deleteTodo(id, dateKey) {
     showTodosForDate(selectedDate);
     // 更新日历标记
     renderCalendar();
+    
+    // 触发数据同步到云端
+    if (window.syncData) {
+        window.syncData();
+    }
 }
 
 // 初始化长期计划页面
@@ -1304,8 +1328,14 @@ function updatePlanTitle(planId, newTitle) {
     
     if (planIndex !== -1) {
         plans[planIndex].title = newTitle;
+        plans[planIndex].updatedAt = new Date().toISOString();
         localStorage.setItem('plans', JSON.stringify(plans));
         renderPlans();
+        
+        // 触发数据同步到云端
+        if (window.syncData) {
+            window.syncData();
+        }
     }
 }
 
@@ -1316,8 +1346,14 @@ function updatePlanPriority(planId, priority) {
     
     if (planIndex !== -1) {
         plans[planIndex].priority = priority;
+        plans[planIndex].updatedAt = new Date().toISOString();
         localStorage.setItem('plans', JSON.stringify(plans));
         renderPlans();
+        
+        // 触发数据同步到云端
+        if (window.syncData) {
+            window.syncData();
+        }
     }
 }
 
@@ -1328,7 +1364,13 @@ function updatePlanDescription(planId, newDescription) {
     
     if (planIndex !== -1) {
         plans[planIndex].description = newDescription;
+        plans[planIndex].updatedAt = new Date().toISOString();
         localStorage.setItem('plans', JSON.stringify(plans));
+        
+        // 触发数据同步到云端
+        if (window.syncData) {
+            window.syncData();
+        }
     }
 }
 
@@ -1343,10 +1385,12 @@ function addSubtask(planId, subtaskText) {
                 id: Date.now(),
                 text: subtaskText.trim(),
                 completed: false,
-                createdAt: Date.now() // 添加创建时间
+                createdAt: Date.now(), // 添加创建时间
+                updatedAt: Date.now()
             };
             
             plans[planIndex].subtasks.push(newSubtask);
+            plans[planIndex].updatedAt = new Date().toISOString();
             localStorage.setItem('plans', JSON.stringify(plans));
             
             // 更新计划状态
@@ -1355,6 +1399,11 @@ function addSubtask(planId, subtaskText) {
             // 简化实现：重新渲染所有计划
             // 这样可以确保所有状态都正确同步，避免复杂的DOM操作导致的问题
             renderPlans();
+            
+            // 触发数据同步到云端
+            if (window.syncData) {
+                window.syncData();
+            }
         }
     }
 }
@@ -1465,6 +1514,7 @@ function deleteSubtask(planId, subtaskId) {
     if (planIndex !== -1) {
         // 先保存更新后的数据
         plans[planIndex].subtasks = plans[planIndex].subtasks.filter(subtask => subtask.id !== subtaskId);
+        plans[planIndex].updatedAt = new Date().toISOString();
         localStorage.setItem('plans', JSON.stringify(plans));
         
         // 更新计划状态
@@ -1508,6 +1558,11 @@ function deletePlan(planId) {
     
     localStorage.setItem('plans', JSON.stringify(updatedPlans));
     renderPlans();
+    
+    // 触发数据同步到云端
+    if (window.syncData) {
+        window.syncData();
+    }
 }
 
 // 初始化随手记页面
@@ -1539,7 +1594,8 @@ function saveNote() {
         const newNote = {
             id: Date.now(),
             content: content,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
         };
         
         notes.unshift(newNote); // 新笔记添加到开头
@@ -1552,6 +1608,11 @@ function saveNote() {
         
         // 更新显示
         renderNotes();
+        
+        // 触发数据同步到云端
+        if (window.syncData) {
+            window.syncData();
+        }
     }
 }
 
@@ -1697,8 +1758,14 @@ function updateNote(noteId, newContent) {
     
     if (noteIndex !== -1) {
         notes[noteIndex].content = newContent;
+        notes[noteIndex].updatedAt = new Date().toISOString();
         localStorage.setItem('notes', JSON.stringify(notes));
         renderNotes();
+        
+        // 触发数据同步到云端
+        if (window.syncData) {
+            window.syncData();
+        }
     }
 }
 
@@ -1731,6 +1798,11 @@ function deleteNote(noteId) {
     
     localStorage.setItem('notes', JSON.stringify(updatedNotes));
     renderNotes();
+    
+    // 触发数据同步到云端
+    if (window.syncData) {
+        window.syncData();
+    }
 }
 
 // AI助手功能

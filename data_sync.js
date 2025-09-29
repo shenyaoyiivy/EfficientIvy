@@ -51,6 +51,15 @@ async function fetchAllUserData(userId) {
     }
 }
 
+// 将日期格式转换为存储键名格式 (YYYY-MM-DD)
+function formatDateKey(date) {
+    const d = new Date(date);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
 // 将待办事项保存到云端
 async function saveTodosToCloud(userId, todos) {
     try {
@@ -150,8 +159,41 @@ async function syncFromCloud() {
     try {
         const userData = await fetchAllUserData(user.id);
         
-        // 保存待办事项到本地存储
-        localStorage.setItem('todos', JSON.stringify(userData.todos));
+        // 保存待办事项到本地存储（按日期组织）
+        // 先清空所有现有的待办事项键
+        const keysToRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key.startsWith('todos_')) {
+                keysToRemove.push(key);
+            }
+        }
+        keysToRemove.forEach(key => localStorage.removeItem(key));
+        
+        // 然后按日期存储待办事项
+        if (userData.todos && userData.todos.length > 0) {
+            // 保存原始待办事项数据（用于同步到云端）
+            localStorage.setItem('todos', JSON.stringify(userData.todos));
+            
+            // 按日期重新组织待办事项
+            const todosByDate = {};
+            userData.todos.forEach(todo => {
+                if (todo.date) {
+                    const dateKey = formatDateKey(todo.date);
+                    if (!todosByDate[dateKey]) {
+                        todosByDate[dateKey] = [];
+                    }
+                    todosByDate[dateKey].push(todo);
+                }
+            });
+            
+            // 保存按日期组织的待办事项
+            Object.keys(todosByDate).forEach(dateKey => {
+                localStorage.setItem(`todos_${dateKey}`, JSON.stringify(todosByDate[dateKey]));
+            });
+        } else {
+            localStorage.setItem('todos', JSON.stringify([]));
+        }
         
         // 保存长期计划到本地存储
         localStorage.setItem('plans', JSON.stringify(userData.plans));
@@ -180,9 +222,61 @@ async function syncToCloud() {
     }
     
     try {
-        // 从本地存储获取待办事项
+        // 收集所有按日期存储的待办事项
+        let allTodos = [];
+        
+        // 先检查是否有单一todos键的数据
         const todosStr = localStorage.getItem('todos');
-        const todos = todosStr ? JSON.parse(todosStr) : [];
+        if (todosStr) {
+            try {
+                const todos = JSON.parse(todosStr);
+                if (Array.isArray(todos)) {
+                    allTodos = [...allTodos, ...todos];
+                }
+            } catch (e) {
+                console.error('解析todos数据失败:', e);
+            }
+        }
+        
+        // 然后收集所有按日期组织的待办事项
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key.startsWith('todos_') && key !== 'todos') {
+                try {
+                    const dateTodos = JSON.parse(localStorage.getItem(key));
+                    if (Array.isArray(dateTodos)) {
+                        // 为每个待办事项添加日期信息（从键名中提取）
+                        const dateStr = key.replace('todos_', '');
+                        const datedTodos = dateTodos.map(todo => ({
+                            ...todo,
+                            date: dateStr,
+                            updated_at: new Date().toISOString()
+                        }));
+                        allTodos = [...allTodos, ...datedTodos];
+                    }
+                } catch (e) {
+                    console.error(`解析${key}数据失败:`, e);
+                }
+            }
+        }
+        
+        // 去重（保留最新的待办事项）
+        const uniqueTodos = {};
+        allTodos.forEach(todo => {
+            // 使用id作为唯一标识，如果没有id则生成一个
+            const todoId = todo.id || `todo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            if (!uniqueTodos[todoId] || 
+                (todo.updated_at && uniqueTodos[todoId].updated_at && 
+                 new Date(todo.updated_at) > new Date(uniqueTodos[todoId].updated_at))) {
+                uniqueTodos[todoId] = { ...todo, id: todoId };
+            }
+        });
+        
+        // 转换回数组
+        const finalTodos = Object.values(uniqueTodos);
+        
+        // 更新单一todos键，用于下次同步
+        localStorage.setItem('todos', JSON.stringify(finalTodos));
         
         // 从本地存储获取长期计划
         const plansStr = localStorage.getItem('plans');
@@ -193,7 +287,7 @@ async function syncToCloud() {
         const notes = notesStr ? JSON.parse(notesStr) : [];
         
         // 同步待办事项
-        const todosSynced = await saveTodosToCloud(user.id, todos);
+        const todosSynced = await saveTodosToCloud(user.id, finalTodos);
         if (!todosSynced) {
             console.error('同步待办事项失败');
             return false;
