@@ -1,8 +1,57 @@
 // data_sync.js - 处理数据同步功能
 
+// 确保supabase已初始化
+if (!window.supabase) {
+    console.warn('Supabase客户端尚未初始化，数据同步功能可能受限');
+}
+
+// 收集本地所有待办事项
+export function collectLocalTodos() {
+    try {
+        // 先尝试从todos键获取所有待办事项
+        const todos = JSON.parse(localStorage.getItem('todos') || '[]');
+        if (todos && todos.length > 0) {
+            return todos;
+        }
+        
+        // 如果todos键不存在或为空，则从按日期组织的待办事项中收集
+        const allTodos = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key.startsWith('todos_')) {
+                const dateTodos = JSON.parse(localStorage.getItem(key) || '[]');
+                if (dateTodos && Array.isArray(dateTodos)) {
+                    allTodos.push(...dateTodos);
+                }
+            }
+        }
+        
+        return allTodos;
+    } catch (error) {
+        console.error('收集本地待办事项失败:', error);
+        return [];
+    }
+}
+
+// 收集本地所有长期计划
+export function collectLocalPlans() {
+    try {
+        const plans = JSON.parse(localStorage.getItem('plans') || '[]');
+        return plans || [];
+    } catch (error) {
+        console.error('收集本地长期计划失败:', error);
+        return [];
+    }
+}
+
 // 从云端获取所有数据
 async function fetchAllUserData(userId) {
     try {
+        if (!window.supabase) {
+            console.error('Supabase客户端未初始化，无法获取云端数据');
+            return { todos: [], plans: [], notes: [] };
+        }
+        
         // 获取待办事项
         const { data: todosData, error: todosError } = await window.supabase
             .from('todos')
@@ -51,49 +100,53 @@ async function fetchAllUserData(userId) {
     }
 }
 
-// 将日期格式转换为存储键名格式 (YYYY-MM-DD)
-function formatDateKey(date) {
-    const d = new Date(date);
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
+// 格式化日期键
+export function formatDateKey(date) {
+    if (!date) return '';
+    
+    const dateObj = typeof date === 'string' ? new Date(date) : date;
+    const year = dateObj.getFullYear();
+    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const day = String(dateObj.getDate()).padStart(2, '0');
+    
     return `${year}-${month}-${day}`;
 }
 
 // 将待办事项保存到云端
 async function saveTodosToCloud(userId, todos) {
     try {
-        // 先删除用户的所有待办事项
+        if (!window.supabase) {
+            console.error('Supabase客户端未初始化，无法保存待办事项到云端');
+            return false;
+        }
+        
+        // 先删除该用户的所有待办事项
         const { error: deleteError } = await window.supabase
             .from('todos')
             .delete()
             .eq('user_id', userId);
         
         if (deleteError) {
-            console.error('删除待办事项失败:', deleteError);
+            console.error('删除原有待办事项失败:', deleteError);
             return false;
         }
         
-        // 批量插入新的待办事项
-        if (todos.length > 0) {
+        // 然后批量插入新的待办事项
+        if (todos && todos.length > 0) {
             const todoRecords = todos.map(todo => ({
                 ...todo,
                 user_id: userId,
-                updated_at: new Date().toISOString()
+                created_at: todo.created_at || new Date().toISOString(),
+                updated_at: todo.updated_at || new Date().toISOString()
             }));
             
-            // 分批插入，避免超过Supabase的批量操作限制
-            const batchSize = 100;
-            for (let i = 0; i < todoRecords.length; i += batchSize) {
-                const batch = todoRecords.slice(i, i + batchSize);
-                const { error: insertError } = await window.supabase
-                    .from('todos')
-                    .insert(batch);
-                
-                if (insertError) {
-                    console.error('插入待办事项失败:', insertError);
-                    return false;
-                }
+            const { error: insertError } = await window.supabase
+                .from('todos')
+                .insert(todoRecords);
+            
+            if (insertError) {
+                console.error('批量插入待办事项失败:', insertError);
+                return false;
             }
         }
         
@@ -107,37 +160,38 @@ async function saveTodosToCloud(userId, todos) {
 // 将长期计划保存到云端
 async function savePlansToCloud(userId, plans) {
     try {
-        // 先删除用户的所有长期计划
+        if (!window.supabase) {
+            console.error('Supabase客户端未初始化，无法保存长期计划到云端');
+            return false;
+        }
+        
+        // 先删除该用户的所有长期计划
         const { error: deleteError } = await window.supabase
             .from('plans')
             .delete()
             .eq('user_id', userId);
         
         if (deleteError) {
-            console.error('删除长期计划失败:', deleteError);
+            console.error('删除原有长期计划失败:', deleteError);
             return false;
         }
         
-        // 批量插入新的长期计划
-        if (plans.length > 0) {
+        // 然后批量插入新的长期计划
+        if (plans && plans.length > 0) {
             const planRecords = plans.map(plan => ({
                 ...plan,
                 user_id: userId,
-                updated_at: new Date().toISOString()
+                created_at: plan.created_at || new Date().toISOString(),
+                updated_at: plan.updated_at || new Date().toISOString()
             }));
             
-            // 分批插入，避免超过Supabase的批量操作限制
-            const batchSize = 100;
-            for (let i = 0; i < planRecords.length; i += batchSize) {
-                const batch = planRecords.slice(i, i + batchSize);
-                const { error: insertError } = await window.supabase
-                    .from('plans')
-                    .insert(batch);
-                
-                if (insertError) {
-                    console.error('插入长期计划失败:', insertError);
-                    return false;
-                }
+            const { error: insertError } = await window.supabase
+                .from('plans')
+                .insert(planRecords);
+            
+            if (insertError) {
+                console.error('批量插入长期计划失败:', insertError);
+                return false;
             }
         }
         
@@ -149,8 +203,14 @@ async function savePlansToCloud(userId, plans) {
 }
 
 // 从云端同步数据到本地
-async function syncFromCloud() {
+window.syncFromCloud = async function() {
     console.log('开始从云端同步数据到本地...');
+    
+    // 确保getCurrentUser函数存在
+    if (!window.getCurrentUser) {
+        console.error('getCurrentUser函数未定义，无法从云端同步数据');
+        return false;
+    }
     
     const user = await window.getCurrentUser();
     if (!user) {
@@ -207,50 +267,17 @@ async function syncFromCloud() {
         console.error('从云端同步数据到本地时发生错误:', error);
         return false;
     }
-}
-
-// 收集本地所有待办事项
-export function collectLocalTodos() {
-    try {
-        // 先尝试从todos键获取所有待办事项
-        const todos = JSON.parse(localStorage.getItem('todos') || '[]');
-        if (todos && todos.length > 0) {
-            return todos;
-        }
-        
-        // 如果todos键不存在或为空，则从按日期组织的待办事项中收集
-        const allTodos = [];
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key.startsWith('todos_')) {
-                const dateTodos = JSON.parse(localStorage.getItem(key) || '[]');
-                if (dateTodos && Array.isArray(dateTodos)) {
-                    allTodos.push(...dateTodos);
-                }
-            }
-        }
-        
-        return allTodos;
-    } catch (error) {
-        console.error('收集本地待办事项失败:', error);
-        return [];
-    }
-}
-
-// 收集本地所有长期计划
-export function collectLocalPlans() {
-    try {
-        const plans = JSON.parse(localStorage.getItem('plans') || '[]');
-        return plans || [];
-    } catch (error) {
-        console.error('收集本地长期计划失败:', error);
-        return [];
-    }
-}
+};
 
 // 将本地数据同步到云端
-async function syncToCloud() {
+window.syncToCloud = async function() {
     console.log('开始将本地数据同步到云端...');
+    
+    // 确保getCurrentUser函数存在
+    if (!window.getCurrentUser) {
+        console.error('getCurrentUser函数未定义，无法同步到云端');
+        return false;
+    }
     
     const user = await window.getCurrentUser();
     if (!user) {
@@ -285,61 +312,17 @@ async function syncToCloud() {
         console.error('将本地数据同步到云端时发生错误:', error);
         return false;
     }
-}
-
-// 合并待办事项数据，保留最新的版本
-function mergeTodosData(cloudTodos, localTodos) {
-    const merged = {};
-    
-    // 先添加云端数据
-    if (cloudTodos) {
-        cloudTodos.forEach(todo => {
-            const key = `${todo.date}_${todo.id}`;
-            merged[key] = { ...todo };
-        });
-    }
-    
-    // 再用本地数据覆盖，保留最新版本
-    localTodos.forEach(todo => {
-        const key = `${todo.date}_${todo.id}`;
-        // 如果云端不存在这个待办事项，或者本地版本更新（根据updated_at），则保留本地版本
-        if (!merged[key] || !todo.updated_at || !merged[key].updated_at || 
-            new Date(todo.updated_at) > new Date(merged[key].updated_at)) {
-            merged[key] = { ...todo };
-        }
-    });
-    
-    // 转换回数组格式
-    return Object.values(merged);
-}
-
-// 合并计划数据，保留最新的版本
-function mergePlansData(cloudPlans, localPlans) {
-    const merged = {};
-    
-    // 先添加云端数据
-    if (cloudPlans) {
-        cloudPlans.forEach(plan => {
-            merged[plan.id] = { ...plan };
-        });
-    }
-    
-    // 再用本地数据覆盖，保留最新版本
-    localPlans.forEach(plan => {
-        // 如果云端不存在这个计划，或者本地版本更新（根据updated_at），则保留本地版本
-        if (!merged[plan.id] || !plan.updated_at || !merged[plan.id].updated_at || 
-            new Date(plan.updated_at) > new Date(merged[plan.id].updated_at)) {
-            merged[plan.id] = { ...plan };
-        }
-    });
-    
-    // 转换回数组格式
-    return Object.values(merged);
-}
+};
 
 // 主要的数据同步函数（结合双向同步）
-async function syncData() {
+window.syncData = async function() {
     console.log('开始执行数据同步...');
+    
+    // 确保getCurrentUser函数存在
+    if (!window.getCurrentUser) {
+        console.error('getCurrentUser函数未定义，无法执行数据同步');
+        return false;
+    }
     
     const user = await window.getCurrentUser();
     if (!user) {
@@ -370,12 +353,17 @@ async function syncData() {
         // 4. 合并云端和本地数据（保留最新版本）
         const mergedTodos = mergeTodosData(cloudData.todos, currentLocalTodos);
         const mergedPlans = mergePlansData(cloudData.plans, currentLocalPlans);
-        const mergedNotes = cloudData.notes && cloudData.notes.length > 0 ? 
-            cloudData.notes : localNotesBackup;
         
-        console.log('数据合并完成，准备保存到本地...');
+        // 5. 保存合并后的数据到云端
+        const saveToCloudResult = await saveTodosToCloud(user.id, mergedTodos) && 
+                                 await savePlansToCloud(user.id, mergedPlans);
         
-        // 5. 按日期组织待办事项并保存到localStorage
+        if (!saveToCloudResult) {
+            console.error('保存数据到云端失败');
+            throw new Error('保存数据到云端失败');
+        }
+        
+        // 6. 按日期组织待办事项并保存到本地
         const todosByDate = {};
         mergedTodos.forEach(todo => {
             const dateKey = `todos_${formatDateKey(todo.date)}`;
@@ -391,56 +379,39 @@ async function syncData() {
         });
         
         // 保存合并后的计划和笔记数据
-        localStorage.setItem('plans', JSON.stringify(mergedPlans));
-        localStorage.setItem('notes', JSON.stringify(mergedNotes));
-        
-        console.log('数据已保存到本地存储，准备同步到云端...');
-        
-        // 6. 使用upsert方式将合并后的数据同步到云端
-        const syncTodosResult = await upsertTodosToCloud(user.id, mergedTodos);
-        const syncPlansResult = await upsertPlansToCloud(user.id, mergedPlans);
-        
-        if (syncTodosResult && syncPlansResult) {
-            console.log('数据同步成功！');
-            // 触发数据同步完成事件
-            window.dispatchEvent(new CustomEvent('dataSynced'));
-            return true;
-        } else {
-            console.error('同步数据到云端失败，正在恢复本地备份...');
-            
-            // 7. 同步失败时，恢复本地数据
-            localStorage.setItem('todos', JSON.stringify(localTodosBackup));
-            localStorage.setItem('plans', JSON.stringify(localPlansBackup));
-            localStorage.setItem('notes', JSON.stringify(localNotesBackup));
-            
-            // 重新按日期组织待办事项
-            const backupTodosByDate = {};
-            localTodosBackup.forEach(todo => {
-                const dateKey = `todos_${formatDateKey(todo.date)}`;
-                if (!backupTodosByDate[dateKey]) {
-                    backupTodosByDate[dateKey] = [];
-                }
-                backupTodosByDate[dateKey].push(todo);
-            });
-            
-            // 保存恢复的按日期组织的待办事项
-            Object.entries(backupTodosByDate).forEach(([key, todos]) => {
-                localStorage.setItem(key, JSON.stringify(todos));
-            });
-            
-            console.log('本地数据已恢复');
-            return false;
+        if (mergedPlans && mergedPlans.length > 0) {
+            localStorage.setItem('plans', JSON.stringify(mergedPlans));
         }
+        
+        if (cloudData.notes && cloudData.notes.length > 0) {
+            localStorage.setItem('notes', JSON.stringify(cloudData.notes));
+        }
+        
+        console.log('数据同步完成');
+        
+        // 触发数据同步完成事件
+        const dataSyncedEvent = new CustomEvent('dataSynced');
+        window.dispatchEvent(dataSyncedEvent);
+        
+        return true;
     } catch (error) {
         console.error('数据同步过程中发生错误:', error);
         
-        // 同步过程中发生错误，尝试恢复本地数据
+        // 尝试恢复本地数据
         try {
             console.log('尝试恢复本地数据...');
-            const localTodosBackup = collectLocalTodos();
-            const localPlansBackup = collectLocalPlans();
-            const localNotesBackup = JSON.parse(localStorage.getItem('notes') || '[]');
             
+            // 清空现有的待办事项数据（按日期存储的）
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key.startsWith('todos_')) {
+                    localStorage.removeItem(key);
+                    // 因为我们修改了localStorage，所以需要重新遍历
+                    i--;
+                }
+            }
+            
+            // 保存备份的数据
             localStorage.setItem('todos', JSON.stringify(localTodosBackup));
             localStorage.setItem('plans', JSON.stringify(localPlansBackup));
             localStorage.setItem('notes', JSON.stringify(localNotesBackup));
@@ -467,44 +438,52 @@ async function syncData() {
         
         return false;
     }
-}
+};
 
-// 合并两个数据集，基于ID和更新时间戳保留最新版本
-function mergeData(localData, cloudData, idField, timestampField) {
-    const mergedMap = new Map();
+// 通用数据合并函数
+function mergeData(localData, cloudData, idField, dateField) {
+    const merged = {};
     
-    // 先添加本地数据
-    localData.forEach(item => {
-        if (item[idField]) {
-            mergedMap.set(item[idField], item);
-        }
-    });
-    
-    // 再添加或更新云端数据（如果云端数据更新）
-    cloudData.forEach(item => {
-        if (item[idField]) {
-            const existingItem = mergedMap.get(item[idField]);
-            // 如果本地没有该数据，或者云端数据更新，则使用云端数据
-            if (!existingItem || 
-                !existingItem[timestampField] || 
-                !item[timestampField] || 
-                new Date(item[timestampField]) > new Date(existingItem[timestampField])) {
-                mergedMap.set(item[idField], item);
+    // 先添加云端数据
+    if (cloudData && Array.isArray(cloudData)) {
+        cloudData.forEach(item => {
+            if (item[idField]) {
+                merged[item[idField]] = item;
             }
-        }
-    });
+        });
+    }
     
-    // 转换回数组
-    return Array.from(mergedMap.values());
+    // 然后添加或更新本地数据（优先保留更新时间较晚的数据）
+    if (localData && Array.isArray(localData)) {
+        localData.forEach(item => {
+            if (item[idField]) {
+                const existing = merged[item[idField]];
+                if (!existing || 
+                    (!existing[dateField] && item[dateField]) || 
+                    (existing[dateField] && item[dateField] && 
+                     new Date(item[dateField]) > new Date(existing[dateField]))) {
+                    merged[item[idField]] = item;
+                }
+            }
+        });
+    }
+    
+    return Object.values(merged);
 }
 
-// 使用upsert方式将待办事项保存到云端（不删除现有数据，只更新或插入）
+// 使用upsert方式将待办事项同步到云端
 async function upsertTodosToCloud(userId, todos) {
     try {
+        if (!window.supabase) {
+            console.error('Supabase客户端未初始化，无法同步待办事项到云端');
+            return false;
+        }
+        
         if (todos.length > 0) {
-            const todoRecords = todos.map(todo => ({ 
-                ...todo, 
+            const todoRecords = todos.map(todo => ({
+                ...todo,
                 user_id: userId,
+                created_at: todo.created_at || new Date().toISOString(),
                 updated_at: todo.updated_at || new Date().toISOString()
             }));
             
@@ -529,13 +508,19 @@ async function upsertTodosToCloud(userId, todos) {
     }
 }
 
-// 使用upsert方式将长期计划保存到云端（不删除现有数据，只更新或插入）
+// 使用upsert方式将长期计划同步到云端
 async function upsertPlansToCloud(userId, plans) {
     try {
+        if (!window.supabase) {
+            console.error('Supabase客户端未初始化，无法同步长期计划到云端');
+            return false;
+        }
+        
         if (plans.length > 0) {
-            const planRecords = plans.map(plan => ({ 
-                ...plan, 
+            const planRecords = plans.map(plan => ({
+                ...plan,
                 user_id: userId,
+                created_at: plan.created_at || new Date().toISOString(),
                 updated_at: plan.updated_at || new Date().toISOString()
             }));
             
@@ -598,3 +583,59 @@ function initDataSync() {
 
 // 将initDataSync函数挂载到window对象上，以便在app.js中访问
 window.initDataSync = initDataSync;
+
+// 合并待办事项数据
+export function mergeTodosData(cloudTodos, localTodos) {
+    const merged = {};
+    
+    // 处理云端数据
+    if (cloudTodos && Array.isArray(cloudTodos)) {
+        cloudTodos.forEach(todo => {
+            const key = `${todo.date}_${todo.id}`;
+            merged[key] = todo;
+        });
+    }
+    
+    // 处理本地数据（优先级更高，因为可能包含最新的编辑）
+    if (localTodos && Array.isArray(localTodos)) {
+        localTodos.forEach(todo => {
+            const key = `${todo.date}_${todo.id}`;
+            merged[key] = todo;
+        });
+    }
+    
+    // 转换为数组并按日期排序
+    return Object.values(merged).sort((a, b) => {
+        return new Date(a.date) - new Date(b.date);
+    });
+}
+
+// 合并长期计划数据
+export function mergePlansData(cloudPlans, localPlans) {
+    const merged = {};
+    
+    // 处理云端数据
+    if (cloudPlans && Array.isArray(cloudPlans)) {
+        cloudPlans.forEach(plan => {
+            if (plan.id) {
+                merged[plan.id] = plan;
+            }
+        });
+    }
+    
+    // 处理本地数据（优先级更高）
+    if (localPlans && Array.isArray(localPlans)) {
+        localPlans.forEach(plan => {
+            if (plan.id) {
+                merged[plan.id] = plan;
+            }
+        });
+    }
+    
+    // 转换为数组并按创建时间排序
+    return Object.values(merged).sort((a, b) => {
+        const dateA = a.created_at ? new Date(a.created_at) : new Date(0);
+        const dateB = b.created_at ? new Date(b.created_at) : new Date(0);
+        return dateB - dateA; // 降序排列
+    });
+}
