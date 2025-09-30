@@ -778,15 +778,18 @@ async function addTodo() { // 确保函数是异步的，因为Supabase操作是
 
                     if (error) {
                         console.error('Error inserting todo:', error);
-                        alert('数据同步失败，请重试！');
-                        // 即使云端同步失败，也可以继续保存到本地，让用户体验不中断
-                        // 后续可以在适当的时机重新尝试同步
+                        alert('云端同步失败，待办事项将只保存在本地。');
+                        // 只在本地保存作为备用方案
+                        const todos = JSON.parse(localStorage.getItem(`todos_${dateKey}`) || '[]');
+                        todos.push(newTodo);
+                        localStorage.setItem(`todos_${dateKey}`, JSON.stringify(todos));
+                    } else {
+                        console.log('数据成功写入Supabase:', data);
+                        // 只有当数据成功写入Supabase后，才将其保存到本地存储
+                        const todos = JSON.parse(localStorage.getItem(`todos_${dateKey}`) || '[]');
+                        todos.push(newTodo);
+                        localStorage.setItem(`todos_${dateKey}`, JSON.stringify(todos));
                     }
-
-                    // 无论Supabase是否成功，都更新本地存储（提供更好的离线体验）
-                    const todos = JSON.parse(localStorage.getItem(`todos_${dateKey}`) || '[]');
-                    todos.push(newTodo);
-                    localStorage.setItem(`todos_${dateKey}`, JSON.stringify(todos));
 
                     // 清空输入框
                     todoInput.value = '';
