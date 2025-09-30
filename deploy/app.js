@@ -741,45 +741,118 @@ function reorderTodos(draggedId, targetId, dateKey) {
 }
 
 // 添加新待办
-function addTodo() {
+async function addTodo() { // 确保函数是异步的，因为Supabase操作是异步的
     const todoInput = document.getElementById('todo-input');
     const text = todoInput.value.trim();
-    
+
     if (text) {
         const year = selectedDate.getFullYear();
         const month = selectedDate.getMonth() + 1;
         const day = selectedDate.getDate();
         const dateKey = `${year}-${month}-${day}`;
+
+        // 检查Supabase客户端是否已初始化
+        if (window.supabase) {
+            try {
+                // 获取当前用户信息
+                const { data: { user } } = await window.supabase.auth.getUser();
+
+                // 只有当用户登录时才同步到云端
+                if (user) {
+                    // 新待办的数据结构，包括 user_id
+                    const newTodo = {
+                        text: text,
+                        user_id: user.id, // 将待办事项与用户关联
+                        completed: false,
+                        priority: null, // null, 'low', 'medium', 'high'
+                        date_key: dateKey,
+                        created_at: new Date().toISOString(),
+                        updated_at: new Date().toISOString()
+                    };
+
+                    // 向 Supabase 插入数据
+                    const { data, error } = await window.supabase
+                        .from('todos')
+                        .insert([newTodo])
+                        .select(); // 插入后返回新创建的数据
+
+                    if (error) {
+                        console.error('Error inserting todo:', error);
+                        alert('数据同步失败，请重试！');
+                        // 即使云端同步失败，也可以继续保存到本地，让用户体验不中断
+                        // 后续可以在适当的时机重新尝试同步
+                    }
+
+                    // 无论Supabase是否成功，都更新本地存储（提供更好的离线体验）
+                    const todos = JSON.parse(localStorage.getItem(`todos_${dateKey}`) || '[]');
+                    todos.push(newTodo);
+                    localStorage.setItem(`todos_${dateKey}`, JSON.stringify(todos));
+
+                    // 清空输入框
+                    todoInput.value = '';
+
+                    // 更新显示
+                    showTodosForDate(selectedDate);
+                    renderCalendar();
+
+                    return;
+                }
+            } catch (error) {
+                console.error('Supabase操作异常:', error);
+                // 异常情况下继续执行本地保存逻辑
+            }
+        }
         
-        // 获取现有待办
+        // 如果Supabase未初始化、用户未登录或操作失败，只保存到本地
         const todos = JSON.parse(localStorage.getItem(`todos_${dateKey}`) || '[]');
-        
-        // 添加新待办
         const newTodo = {
             id: Date.now(),
             text: text,
             completed: false,
-            priority: null, // null, 'low', 'medium', 'high'
+            priority: null,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
         };
-        
         todos.push(newTodo);
-        
-        // 保存到localStorage
         localStorage.setItem(`todos_${dateKey}`, JSON.stringify(todos));
-        
-        // 清空输入框
+
+        // 清空输入框并更新显示
         todoInput.value = '';
-        
-        // 更新显示
         showTodosForDate(selectedDate);
-        // 更新日历标记
         renderCalendar();
-        
-        // 触发数据同步到云端
-        if (window.syncData) {
-            window.syncData();
+    }
+}
+
+            // 如果 Supabase 插入成功，再更新本地存储
+            const todos = JSON.parse(localStorage.getItem(`todos_${dateKey}`) || '[]');
+            todos.push(newTodo); // 或者使用从 Supabase 返回的数据
+            localStorage.setItem(`todos_${dateKey}`, JSON.stringify(todos));
+
+            // 清空输入框
+            todoInput.value = '';
+
+            // 更新显示
+            showTodosForDate(selectedDate);
+            renderCalendar();
+
+        } else {
+            // 用户未登录，只保存到本地
+            const todos = JSON.parse(localStorage.getItem(`todos_${dateKey}`) || '[]');
+            const newTodo = {
+                id: Date.now(),
+                text: text,
+                completed: false,
+                priority: null,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            };
+            todos.push(newTodo);
+            localStorage.setItem(`todos_${dateKey}`, JSON.stringify(todos));
+
+            // 清空输入框并更新显示
+            todoInput.value = '';
+            showTodosForDate(selectedDate);
+            renderCalendar();
         }
     }
 }
