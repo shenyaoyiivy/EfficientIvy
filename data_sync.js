@@ -135,14 +135,18 @@ async function saveTodosToCloud(userId, todos) {
         if (todos && todos.length > 0) {
             const todoRecords = todos.map(todo => ({
                 ...todo,
-                user_id: userId,
-                created_at: todo.created_at || new Date().toISOString(),
-                updated_at: todo.updated_at || new Date().toISOString()
+                user_id: userId
             }));
+            
+            // 移除可能存在的created_at和updated_at字段
+            const cleanTodoRecords = todoRecords.map(record => {
+                const { created_at, updated_at, ...cleanRecord } = record;
+                return cleanRecord;
+            });
             
             const { error: insertError } = await window.supabase
                 .from('todos')
-                .insert(todoRecords);
+                .insert(cleanTodoRecords);
             
             if (insertError) {
                 console.error('批量插入待办事项失败:', insertError);
@@ -180,14 +184,18 @@ async function savePlansToCloud(userId, plans) {
         if (plans && plans.length > 0) {
             const planRecords = plans.map(plan => ({
                 ...plan,
-                user_id: userId,
-                created_at: plan.created_at || new Date().toISOString(),
-                updated_at: plan.updated_at || new Date().toISOString()
+                user_id: userId
             }));
+            
+            // 移除可能存在的created_at和updated_at字段
+            const cleanPlanRecords = planRecords.map(record => {
+                const { created_at, updated_at, ...cleanRecord } = record;
+                return cleanRecord;
+            });
             
             const { error: insertError } = await window.supabase
                 .from('plans')
-                .insert(planRecords);
+                .insert(cleanPlanRecords);
             
             if (insertError) {
                 console.error('批量插入长期计划失败:', insertError);
@@ -482,15 +490,19 @@ async function upsertTodosToCloud(userId, todos) {
         if (todos.length > 0) {
             const todoRecords = todos.map(todo => ({
                 ...todo,
-                user_id: userId,
-                created_at: todo.created_at || new Date().toISOString(),
-                updated_at: todo.updated_at || new Date().toISOString()
+                user_id: userId
             }));
+            
+            // 移除可能存在的created_at和updated_at字段
+            const cleanTodoRecords = todoRecords.map(record => {
+                const { created_at, updated_at, ...cleanRecord } = record;
+                return cleanRecord;
+            });
             
             // 分批处理，避免超过Supabase的批量操作限制
             const batchSize = 100;
-            for (let i = 0; i < todoRecords.length; i += batchSize) {
-                const batch = todoRecords.slice(i, i + batchSize);
+            for (let i = 0; i < cleanTodoRecords.length; i += batchSize) {
+                const batch = cleanTodoRecords.slice(i, i + batchSize);
                 const { error: upsertError } = await window.supabase
                     .from('todos')
                     .upsert(batch, { onConflict: 'id' }); // 基于id字段进行upsert
@@ -519,15 +531,19 @@ async function upsertPlansToCloud(userId, plans) {
         if (plans.length > 0) {
             const planRecords = plans.map(plan => ({
                 ...plan,
-                user_id: userId,
-                created_at: plan.created_at || new Date().toISOString(),
-                updated_at: plan.updated_at || new Date().toISOString()
+                user_id: userId
             }));
+            
+            // 移除可能存在的created_at和updated_at字段
+            const cleanPlanRecords = planRecords.map(record => {
+                const { created_at, updated_at, ...cleanRecord } = record;
+                return cleanRecord;
+            });
             
             // 分批处理，避免超过Supabase的批量操作限制
             const batchSize = 100;
-            for (let i = 0; i < planRecords.length; i += batchSize) {
-                const batch = planRecords.slice(i, i + batchSize);
+            for (let i = 0; i < cleanPlanRecords.length; i += batchSize) {
+                const batch = cleanPlanRecords.slice(i, i + batchSize);
                 const { error: upsertError } = await window.supabase
                     .from('plans')
                     .upsert(batch, { onConflict: 'id' }); // 基于id字段进行upsert
