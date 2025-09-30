@@ -823,40 +823,6 @@ async function addTodo() { // 确保函数是异步的，因为Supabase操作是
     }
 }
 
-            // 如果 Supabase 插入成功，再更新本地存储
-            const todos = JSON.parse(localStorage.getItem(`todos_${dateKey}`) || '[]');
-            todos.push(newTodo); // 或者使用从 Supabase 返回的数据
-            localStorage.setItem(`todos_${dateKey}`, JSON.stringify(todos));
-
-            // 清空输入框
-            todoInput.value = '';
-
-            // 更新显示
-            showTodosForDate(selectedDate);
-            renderCalendar();
-
-        } else {
-            // 用户未登录，只保存到本地
-            const todos = JSON.parse(localStorage.getItem(`todos_${dateKey}`) || '[]');
-            const newTodo = {
-                id: Date.now(),
-                text: text,
-                completed: false,
-                priority: null,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString()
-            };
-            todos.push(newTodo);
-            localStorage.setItem(`todos_${dateKey}`, JSON.stringify(todos));
-
-            // 清空输入框并更新显示
-            todoInput.value = '';
-            showTodosForDate(selectedDate);
-            renderCalendar();
-        }
-    }
-}
-
 // 切换待办状态
 function toggleTodoStatus(id, dateKey) {
     // 获取现有待办
