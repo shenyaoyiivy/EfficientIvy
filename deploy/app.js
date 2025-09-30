@@ -1208,9 +1208,6 @@ function renderPlan(plan) {
     actionsSide.appendChild(toggleIcon);
     actionsSide.appendChild(deletePlanBtn);
     
-    leftContent.appendChild(planTitle);
-    leftContent.appendChild(statusElement);
-    
     planHeader.appendChild(leftContent);
     planHeader.appendChild(actionsSide);
     

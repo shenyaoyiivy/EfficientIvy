@@ -1168,6 +1168,7 @@ function renderPlan(plan) {
     
     leftContent.appendChild(titleContainer);
     leftContent.appendChild(createdTimeElement);
+
     planTitle.addEventListener('dblclick', (e) => {
         e.stopPropagation(); // 阻止事件冒泡
         showModal(
@@ -1207,9 +1208,6 @@ function renderPlan(plan) {
     actionsSide.classList.add('flex', 'items-center');
     actionsSide.appendChild(toggleIcon);
     actionsSide.appendChild(deletePlanBtn);
-    
-    leftContent.appendChild(planTitle);
-    leftContent.appendChild(statusElement);
     
     planHeader.appendChild(leftContent);
     planHeader.appendChild(actionsSide);
