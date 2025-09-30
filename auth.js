@@ -153,6 +153,11 @@ export async function getCurrentUser() {
     }
 }
 
+// 将getCurrentUser函数挂载到window对象上，以便在其他脚本中可以全局访问
+if (typeof window !== 'undefined') {
+    window.getCurrentUser = getCurrentUser;
+}
+
 // 用户登录
 export async function loginUser(email, password) {
     if (!window.supabase) {
