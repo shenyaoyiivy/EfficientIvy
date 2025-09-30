@@ -170,7 +170,7 @@ function initApp() {
     setTimeout(() => {
         // 立即显示今日待办页面的数据
         const todayPage = document.getElementById('today-todos');
-        if (!todayPage.classList.contains('hidden')) {
+        if (todayPage && !todayPage.classList.contains('hidden')) {
             showTodosForDate(selectedDate);
         }
         
