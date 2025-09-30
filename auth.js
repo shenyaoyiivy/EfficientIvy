@@ -137,14 +137,18 @@ export async function getCurrentUser() {
     }
     
     try {
-        const { data, error } = await window.supabase.auth.getUser();
+        const result = await window.supabase.auth.getUser();
+        // 兼容不同格式的返回结果
+        const data = result && result.data ? result.data : result;
+        const error = result && result.error ? result.error : null;
+        
         if (error) {
-            console.error('获取用户信息失败:', error);
+            console.warn('获取用户信息失败(这在未登录状态下是正常的):', error);
             return null;
         }
         return data.user;
     } catch (error) {
-        console.error('获取用户信息时发生异常:', error);
+        console.warn('获取用户信息时发生异常(这在未登录状态下是正常的):', error);
         return null;
     }
 }
