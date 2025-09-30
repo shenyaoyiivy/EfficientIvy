@@ -170,7 +170,7 @@ function initApp() {
     setTimeout(() => {
         // 立即显示今日待办页面的数据
         const todayPage = document.getElementById('today-todos');
-        if (!todayPage.classList.contains('hidden')) {
+        if (todayPage && !todayPage.classList.contains('hidden')) {
             showTodosForDate(selectedDate);
         }
         
@@ -178,11 +178,11 @@ function initApp() {
         const planPage = document.getElementById('long-term-plans');
         const notesPage = document.getElementById('notes');
         
-        if (!planPage.classList.contains('hidden')) {
+        if (planPage && !planPage.classList.contains('hidden')) {
             loadPlans();
         }
         
-        if (!notesPage.classList.contains('hidden')) {
+        if (notesPage && !notesPage.classList.contains('hidden')) {
             loadNotes();
         }
     }, 100);
