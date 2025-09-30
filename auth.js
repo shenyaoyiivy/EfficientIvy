@@ -213,12 +213,49 @@ window.updateAuthUI = async function() {
         }
         
         // 触发数据同步 - 从云端加载数据到本地
-        if (window.syncFromCloud) {
-            // 先从云端同步数据到本地存储
-            await window.syncFromCloud();
-        } else if (window.syncData) {
-            // 备用方案：使用完整的同步函数
-            await window.syncData();
+        if (window.syncData) {
+            console.log('用户已登录，开始从云端同步数据...');
+            
+            // 尝试从云端同步数据
+            const syncResult = await window.syncData();
+            
+            if (syncResult) {
+                console.log('数据同步成功，已保存到本地存储');
+                
+                // 确保数据已保存到本地后，主动更新UI显示
+                const today = new Date();
+                const activePage = document.querySelector('.page.active');
+                
+                if (activePage) {
+                    if (activePage.id === 'today-todos') {
+                        showTodosForDate(today);
+                    } else if (activePage.id === 'calendar') {
+                        renderCalendar();
+                        showTodosForDate(today);
+                    } else if (activePage.id === 'long-term-plans') {
+                        if (window.loadPlans) {
+                            window.loadPlans();
+                        }
+                    } else if (activePage.id === 'notes') {
+                        if (window.loadNotes) {
+                            window.loadNotes();
+                        }
+                    }
+                } else {
+                    // 默认显示今天的待办事项
+                    renderCalendar();
+                    showTodosForDate(today);
+                }
+            } else {
+                console.error('数据同步失败，但会尝试使用本地存储的数据');
+                
+                // 无论同步是否成功，都尝试更新UI
+                const today = new Date();
+                renderCalendar();
+                showTodosForDate(today);
+            }
+        } else {
+            console.warn('syncData函数不可用，无法从云端同步数据');
         }
     } else {
         // 用户未登录
