@@ -133,14 +133,21 @@ async function saveTodosToCloud(userId, todos) {
         
         // 然后批量插入新的待办事项
         if (todos && todos.length > 0) {
+            // 确保每个待办事项都有date_key字段
             const todoRecords = todos.map(todo => ({
                 ...todo,
-                user_id: userId
+                user_id: userId,
+                // 如果没有date_key字段但有date字段，使用date字段格式化生成date_key
+                date_key: todo.date_key || (todo.date ? formatDateKey(todo.date) : '')
             }));
             
-            // 移除可能存在的created_at和updated_at字段
+            // 移除可能存在的created_at和updated_at字段，确保date_key字段存在
             const cleanTodoRecords = todoRecords.map(record => {
-                const { created_at, updated_at, ...cleanRecord } = record;
+                const { created_at, updated_at, date, ...cleanRecord } = record;
+                // 如果date_key仍然为空，生成一个默认值
+                if (!cleanRecord.date_key) {
+                    cleanRecord.date_key = formatDateKey(new Date());
+                }
                 return cleanRecord;
             });
             
@@ -488,14 +495,21 @@ async function upsertTodosToCloud(userId, todos) {
         }
         
         if (todos.length > 0) {
+            // 确保每个待办事项都有date_key字段
             const todoRecords = todos.map(todo => ({
                 ...todo,
-                user_id: userId
+                user_id: userId,
+                // 如果没有date_key字段但有date字段，使用date字段格式化生成date_key
+                date_key: todo.date_key || (todo.date ? formatDateKey(todo.date) : '')
             }));
             
-            // 移除可能存在的created_at和updated_at字段
+            // 移除可能存在的created_at和updated_at字段，确保date_key字段存在
             const cleanTodoRecords = todoRecords.map(record => {
-                const { created_at, updated_at, ...cleanRecord } = record;
+                const { created_at, updated_at, date, ...cleanRecord } = record;
+                // 如果date_key仍然为空，生成一个默认值
+                if (!cleanRecord.date_key) {
+                    cleanRecord.date_key = formatDateKey(new Date());
+                }
                 return cleanRecord;
             });
             
