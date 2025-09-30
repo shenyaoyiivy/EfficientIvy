@@ -292,7 +292,7 @@ window.initAuth = function() {
             }
             
             // 显示加载状态
-            const loginButton = document.getElementById('login-button');
+            const loginButton = loginForm.querySelector('button[type="submit"]');
             const originalText = loginButton.textContent;
             loginButton.disabled = true;
             loginButton.textContent = '登录中...';
@@ -344,7 +344,7 @@ window.initAuth = function() {
             }
             
             // 显示加载状态
-            const registerButton = document.getElementById('register-button');
+            const registerButton = registerForm.querySelector('button[type="submit"]');
             const originalText = registerButton.textContent;
             registerButton.disabled = true;
             registerButton.textContent = '注册中...';
