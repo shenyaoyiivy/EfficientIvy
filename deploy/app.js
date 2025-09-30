@@ -765,9 +765,7 @@ async function addTodo() { // 确保函数是异步的，因为Supabase操作是
                         user_id: user.id, // 将待办事项与用户关联
                         completed: false,
                         priority: null, // null, 'low', 'medium', 'high'
-                        date_key: dateKey,
-                        created_at: new Date().toISOString(),
-                        updated_at: new Date().toISOString()
+                        date_key: dateKey
                     };
 
                     // 向 Supabase 插入数据
