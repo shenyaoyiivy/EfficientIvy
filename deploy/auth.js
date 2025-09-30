@@ -4,53 +4,28 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...';
 
 // 初始化Supabase客户端
 if (typeof window !== 'undefined') {
-    // 检查是否已经存在
-    if (!window.supabase) {
-        try {
-            // 优先使用window.Supabase对象（如果存在）
-            if (window.Supabase) {
-                window.supabase = window.Supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-            } else if (window.supabase) {
-                // 如果已经初始化过，则直接使用
-                console.log('Supabase客户端已初始化');
-            } else {
-                // 创建Mock对象作为后备方案
-                window.supabase = {
-                    auth: {
-                        getUser: async () => ({ data: { user: null } }),
-                        signInWithPassword: async () => ({ error: '模拟认证失败' }),
-                        signUp: async () => ({ error: '模拟注册失败' }),
-                        signOut: async () => ({ error: null }),
-                        onAuthStateChange: () => ({ data: { unsubscribe: () => {} } })
-                    },
-                    from: () => ({
-                        select: () => ({ data: [], error: null }),
-                        insert: () => ({ data: [], error: null }),
-                        update: () => ({ data: [], error: null }),
-                        delete: () => ({ data: [], error: null })
-                    })
-                };
-                console.warn('使用模拟的Supabase客户端');
-            }
-        } catch (error) {
-            console.error('初始化Supabase客户端失败:', error);
-            // 使用模拟对象作为最后的后备方案
-            window.supabase = {
-                auth: {
-                    getUser: async () => ({ data: { user: null } }),
-                    signInWithPassword: async () => ({ error: '模拟认证失败' }),
-                    signUp: async () => ({ error: '模拟注册失败' }),
-                    signOut: async () => ({ error: null }),
-                    onAuthStateChange: () => ({ data: { unsubscribe: () => {} } })
-                },
-                from: () => ({
-                    select: () => ({ data: [], error: null }),
-                    insert: () => ({ data: [], error: null }),
-                    update: () => ({ data: [], error: null }),
-                    delete: () => ({ data: [], error: null })
-                })
-            };
-        }
+    try {
+        // 由于我们已经在HTML中引入了Supabase库，应该直接使用全局的supabase.createClient函数
+        window.supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        console.log('Supabase客户端初始化成功');
+    } catch (error) {
+        console.error('Supabase初始化失败:', error);
+        // 创建一个mock对象作为最后的备用方案，确保应用不会因为缺少supabase对象而崩溃
+        window.supabase = {
+            auth: {
+                getUser: async () => ({ data: { user: null } }),
+                signInWithPassword: async () => ({ error: 'Supabase初始化失败' }),
+                signUp: async () => ({ error: 'Supabase初始化失败' }),
+                signOut: async () => ({ error: null }),
+                onAuthStateChange: () => ({ data: { unsubscribe: () => {} } })
+            },
+            from: () => ({
+                select: () => ({ data: [], error: null }),
+                insert: () => ({ data: [], error: null }),
+                update: () => ({ data: [], error: null }),
+                delete: () => ({ data: [], error: null })
+            })
+        };
     }
 }
 

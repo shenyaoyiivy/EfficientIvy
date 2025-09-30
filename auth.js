@@ -5,34 +5,20 @@ const SUPABASE_URL = 'https://mxsmsgfwxnvqxwbideqk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im14c21zZ2Z3eG52cXh3YmlkZXFrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkxNTI4MDQsImV4cCI6MjA3NDcyODgwNH0.vdA4NYpFIYEgJfGdsBAJsEd0v5KieI-fJZ_TxplLI28';
 
 // 初始化Supabase客户端
-if (window.supabase && typeof window.supabase.createClient === 'function') {
-    // 如果已经存在createClient方法，则使用它
-    try {
-        window.supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-        console.log('Supabase客户端初始化成功');
-    } catch (error) {
-        console.error('Supabase初始化失败:', error);
-        window.supabase = null;
-    }
-} else if (typeof window.supabase === 'undefined' && typeof SupabaseClient === 'function') {
-    // 备用方案：如果有SupabaseClient构造函数
-    try {
-        window.supabase = new SupabaseClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-        console.log('使用SupabaseClient构造函数初始化成功');
-    } catch (error) {
-        console.error('SupabaseClient初始化失败:', error);
-        window.supabase = null;
-    }
-} else {
-    console.error('Supabase初始化失败，请确保已加载正确的Supabase SDK');
-    // 创建一个mock对象，确保应用不会因为缺少supabase对象而崩溃
+try {
+    // 由于我们已经在HTML中引入了Supabase库，应该直接使用全局的supabase.createClient函数
+    window.supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    console.log('Supabase客户端初始化成功');
+} catch (error) {
+    console.error('Supabase初始化失败:', error);
+    // 创建一个mock对象作为最后的备用方案，确保应用不会因为缺少supabase对象而崩溃
     window.supabase = {
         auth: {
             getSession: async () => ({ data: { session: null }, error: null }),
-            signInWithPassword: async () => ({ data: null, error: { message: 'Supabase SDK未加载' } }),
-            signUp: async () => ({ data: null, error: { message: 'Supabase SDK未加载' } }),
+            signInWithPassword: async () => ({ data: null, error: { message: 'Supabase初始化失败' } }),
+            signUp: async () => ({ data: null, error: { message: 'Supabase初始化失败' } }),
             signOut: async () => ({ error: null }),
-            getUser: async () => ({ data: { user: null }, error: { message: 'Supabase SDK未加载' } }),
+            getUser: async () => ({ data: { user: null }, error: { message: 'Supabase初始化失败' } }),
             onAuthStateChange: () => ({ data: { unsubscribe: () => {} } })
         }
     };
