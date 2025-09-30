@@ -594,9 +594,27 @@ function initDataSync() {
         }
     }, 5 * 60 * 1000);
     
+    // 安全的获取当前用户函数，确保即使window.getCurrentUser不可用也不会报错
+    async function safeGetCurrentUser() {
+        try {
+            if (typeof window.getCurrentUser === 'function') {
+                return await window.getCurrentUser();
+            } else if (window.supabase && window.supabase.auth && window.supabase.auth.getUser) {
+                // 直接调用supabase.auth.getUser作为后备
+                const result = await window.supabase.auth.getUser();
+                // 兼容不同格式的返回结果
+                const data = result && result.data ? result.data : result;
+                return data && data.user ? data.user : null;
+            }
+        } catch (error) {
+            console.warn('获取用户信息时发生错误:', error);
+        }
+        return null;
+    }
+
     // 在页面卸载前同步数据
     window.addEventListener('beforeunload', async () => {
-        const user = await window.getCurrentUser();
+        const user = await safeGetCurrentUser();
         if (user) {
             // 这里使用同步方式，确保在页面关闭前完成
             try {
