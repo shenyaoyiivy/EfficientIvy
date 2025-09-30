@@ -1601,34 +1601,9 @@ function deleteSubtask(planId, subtaskId) {
         // 更新计划状态
         updatePlanStatus(planId);
         
-        // 直接更新DOM而不是重新渲染整个列表
-        const planHeader = document.querySelector(`div[data-plan-id="${planId}"].cursor-pointer`);
-        if (planHeader) {
-            const planCard = planHeader.closest('div');
-            const planContent = planCard.querySelector(`div[data-plan-id="${planId}"]:not(.cursor-pointer)`);
-            const isExpanded = planContent && !planContent.classList.contains('hidden');
-            
-            if (isExpanded) {
-                // 重新渲染这个特定计划，但保持展开状态
-                const wasExpanded = true;
-                
-                // 先移除旧的计划卡片
-                planCard.remove();
-                
-                // 再渲染更新后的计划
-                renderPlan(plans[planIndex]);
-                
-                // 如果之前是展开状态，重新展开它
-                if (wasExpanded) {
-                    setTimeout(() => {
-                        const newHeader = document.querySelector(`div[data-plan-id="${planId}"].cursor-pointer`);
-                        if (newHeader) {
-                            newHeader.click();
-                        }
-                    }, 10);
-                }
-            }
-        }
+        // 简化实现：重新渲染所有计划
+        // 这样可以确保所有状态都正确同步，避免复杂的DOM操作导致的问题
+        renderPlans();
         
         // 触发数据同步到云端
         if (window.syncData) {
